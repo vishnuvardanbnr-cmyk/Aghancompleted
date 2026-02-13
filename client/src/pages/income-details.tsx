@@ -13,11 +13,12 @@ import {
   Star,
   Shield,
   ArrowUpCircle,
+  Wallet,
 } from "lucide-react";
 
 interface BoardIncome {
   directSponsor: string;
-  levelIncome: string;
+  earnedToMain: string;
   upgradeAccumulated: string;
   total: string;
 }
@@ -26,7 +27,7 @@ interface IncomeData {
   boards: Record<string, BoardIncome>;
   totals: {
     directSponsor: string;
-    levelIncome: string;
+    earnedToMain: string;
     upgradeAccumulated: string;
     grandTotal: string;
   };
@@ -84,7 +85,7 @@ export default function IncomeDetails() {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card className="border-emerald-200 dark:border-emerald-800">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -92,7 +93,7 @@ export default function IncomeDetails() {
                   <Zap className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Direct Sponsor Income (EV Board)</p>
+                  <p className="text-xs text-muted-foreground">Direct Sponsor (EV)</p>
                   <p className="text-xl font-bold text-emerald-600">
                     {formatCurrency(totals?.directSponsor || "0")}
                   </p>
@@ -105,12 +106,28 @@ export default function IncomeDetails() {
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30">
-                  <TrendingUp className="w-5 h-5 text-blue-600" />
+                  <Wallet className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Total Level Income (All Boards)</p>
+                  <p className="text-xs text-muted-foreground">Earned to Main Wallet</p>
                   <p className="text-xl font-bold text-blue-600">
-                    {formatCurrency(totals?.levelIncome || "0")}
+                    {formatCurrency(totals?.earnedToMain || "0")}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-orange-200 dark:border-orange-800">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-orange-50 dark:bg-orange-950/30">
+                  <ArrowUpCircle className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Accumulated for Upgrades</p>
+                  <p className="text-xl font-bold text-orange-600">
+                    {formatCurrency(totals?.upgradeAccumulated || "0")}
                   </p>
                 </div>
               </div>
@@ -147,7 +164,7 @@ export default function IncomeDetails() {
               const isKing = key === "KING";
 
               const ds = parseFloat(boardData?.directSponsor || "0");
-              const li = parseFloat(boardData?.levelIncome || "0");
+              const earned = parseFloat(boardData?.earnedToMain || "0");
               const ua = parseFloat(boardData?.upgradeAccumulated || "0");
               const total = parseFloat(boardData?.total || "0");
 
@@ -181,8 +198,11 @@ export default function IncomeDetails() {
                     ) : (
                       <>
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Level Income</span>
-                          <span className="font-semibold text-sm">{formatCurrency(li)}</span>
+                          <div className="flex items-center gap-1.5">
+                            <Wallet className="w-3.5 h-3.5 text-blue-500" />
+                            <span className="text-sm text-muted-foreground">Earned to Main Wallet</span>
+                          </div>
+                          <span className="font-semibold text-sm text-blue-600">{formatCurrency(earned)}</span>
                         </div>
                         {!isKing && config.nextBoard && (
                           <div className="flex justify-between items-center">

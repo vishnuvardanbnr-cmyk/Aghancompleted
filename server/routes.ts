@@ -222,7 +222,7 @@ export async function registerRoutes(
 
     try {
       const boardTypes = ["EV", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "KING"];
-      const results: Record<string, { directSponsor: string; levelIncome: string; upgradeAccumulated: string; total: string }> = {};
+      const results: Record<string, { directSponsor: string; earnedToMain: string; upgradeAccumulated: string; total: string }> = {};
 
       for (const boardType of boardTypes) {
         const boardDescFilter = sql`(
@@ -248,21 +248,34 @@ export async function registerRoutes(
             .where(and(
               eq(transactions.userId, userId),
               eq(transactions.type, "LEVEL_INCOME"),
+              sql`${transactions.description} ILIKE '%[Upgrade]%'`,
+              boardDescFilter,
+              eq(transactions.status, "COMPLETED")
+            ));
+
+          const [rebirthIncome] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+            .from(transactions)
+            .where(and(
+              eq(transactions.userId, userId),
+              eq(transactions.type, "LEVEL_INCOME"),
+              sql`${transactions.description} NOT ILIKE '%[Upgrade]%'`,
               boardDescFilter,
               eq(transactions.status, "COMPLETED")
             ));
 
           const ds = parseFloat(directSponsor?.total || "0");
           const ua = parseFloat(upgradeAccumulated?.total || "0");
+          const rb = parseFloat(rebirthIncome?.total || "0");
 
           results[boardType] = {
             directSponsor: ds.toFixed(2),
-            levelIncome: "0.00",
+            earnedToMain: rb.toFixed(2),
             upgradeAccumulated: ua.toFixed(2),
             total: ds.toFixed(2),
           };
         } else {
-          const [levelIncomeMainWallet] = await db
+          const [earnedToMain] = await db
             .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
             .from(transactions)
             .where(and(
@@ -273,17 +286,7 @@ export async function registerRoutes(
               eq(transactions.status, "COMPLETED")
             ));
 
-          const [levelIncomeUpgradeAndRebirth] = await db
-            .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-            .from(transactions)
-            .where(and(
-              eq(transactions.userId, userId),
-              eq(transactions.type, "LEVEL_INCOME"),
-              boardDescFilter,
-              eq(transactions.status, "COMPLETED")
-            ));
-
-          const [upgradeOnly] = await db
+          const [upgradeAccumulated] = await db
             .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
             .from(transactions)
             .where(and(
@@ -294,31 +297,41 @@ export async function registerRoutes(
               eq(transactions.status, "COMPLETED")
             ));
 
-          const liMain = parseFloat(levelIncomeMainWallet?.total || "0");
-          const liUpgradeRebirth = parseFloat(levelIncomeUpgradeAndRebirth?.total || "0");
-          const ua = parseFloat(upgradeOnly?.total || "0");
-          const totalLevelIncome = liMain + liUpgradeRebirth;
+          const [rebirthIncome] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+            .from(transactions)
+            .where(and(
+              eq(transactions.userId, userId),
+              eq(transactions.type, "LEVEL_INCOME"),
+              sql`${transactions.description} NOT ILIKE '%[Upgrade]%'`,
+              boardDescFilter,
+              eq(transactions.status, "COMPLETED")
+            ));
+
+          const em = parseFloat(earnedToMain?.total || "0");
+          const ua = parseFloat(upgradeAccumulated?.total || "0");
+          const rb = parseFloat(rebirthIncome?.total || "0");
 
           results[boardType] = {
             directSponsor: "0.00",
-            levelIncome: totalLevelIncome.toFixed(2),
+            earnedToMain: (em + rb).toFixed(2),
             upgradeAccumulated: ua.toFixed(2),
-            total: totalLevelIncome.toFixed(2),
+            total: (em + rb + ua).toFixed(2),
           };
         }
       }
 
       const totalDirectSponsor = parseFloat(results["EV"].directSponsor);
-      const totalLevelIncome = boardTypes.filter(b => b !== "EV").reduce((sum, b) => sum + parseFloat(results[b].levelIncome), 0);
+      const totalEarnedToMain = boardTypes.filter(b => b !== "EV").reduce((sum, b) => sum + parseFloat(results[b].earnedToMain), 0);
       const totalUpgradeAccumulated = Object.values(results).reduce((sum, r) => sum + parseFloat(r.upgradeAccumulated), 0);
 
       res.json({
         boards: results,
         totals: {
           directSponsor: totalDirectSponsor.toFixed(2),
-          levelIncome: totalLevelIncome.toFixed(2),
+          earnedToMain: totalEarnedToMain.toFixed(2),
           upgradeAccumulated: totalUpgradeAccumulated.toFixed(2),
-          grandTotal: (totalDirectSponsor + totalLevelIncome).toFixed(2),
+          grandTotal: (totalDirectSponsor + totalEarnedToMain).toFixed(2),
         },
       });
     } catch (error) {
