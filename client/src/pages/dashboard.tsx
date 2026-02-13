@@ -536,10 +536,10 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Gift className="w-5 h-5 text-primary" />
-              Claim Your EV Reward
+              Claim Your Rebirth Reward
             </DialogTitle>
             <DialogDescription>
-              Choose how you'd like to receive your reward worth Rs.1,00,000
+              Choose how you'd like to receive your rebirth reward worth Rs.1,00,000
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-3">

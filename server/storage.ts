@@ -811,6 +811,24 @@ export class DatabaseStorage implements IStorage {
       if (boardType === "EV") {
         if (completingBoard.isRebirth) {
           await this.createEvReward(userId, true, completingBoard.rebirthIndex || undefined, completingBoard.id);
+
+          const wallet = await this.getWallet(userId);
+          if (wallet && Number(wallet.upgradeBalance) > 0) {
+            const upgradeAmount = Number(wallet.upgradeBalance);
+            const [adminUser] = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
+            if (adminUser) {
+              await this.updateWallet(userId, { upgradeBalance: "0" });
+              await this.addToMainWallet(adminUser.id, upgradeAmount, `Upgrade balance transfer from rebirth board completion (User #${userId}, Rebirth #${completingBoard.rebirthIndex})`);
+              await this.createTransaction({
+                userId,
+                amount: upgradeAmount.toString(),
+                type: "BOARD_ENTRY",
+                description: `Upgrade balance Rs.${upgradeAmount.toLocaleString('en-IN')} transferred to admin on rebirth board completion`,
+                status: "COMPLETED"
+              });
+            }
+          }
+
           await this.placeCompanyInBoard("SILVER");
         } else {
           await this.createEvReward(userId);
@@ -1769,102 +1787,105 @@ export class DatabaseStorage implements IStorage {
   }
 
   async triggerAutoRebirth(userId: number): Promise<void> {
-    const wallet = await this.getWallet(userId);
-    if (!wallet || Number(wallet.rebirthBalance) < 5900) return;
-
-    const rebirthCount = await this.getUserRebirthBoardCount(userId);
-    if (rebirthCount >= MAX_REBIRTH_ACCOUNTS) return;
-
     const user = await this.getUser(userId);
     if (!user) return;
 
-    const rebirthIndex = rebirthCount + 1;
-    const rebirthLabel = `${user.username}${rebirthIndex}`;
+    let currentWallet = await this.getWallet(userId);
+    if (!currentWallet || Number(currentWallet.rebirthBalance) < 5900) return;
 
-    await this.updateWallet(userId, {
-      rebirthBalance: (Number(wallet.rebirthBalance) - 5900).toString()
-    });
+    let rebirthCount = await this.getUserRebirthBoardCount(userId);
+    let currentBalance = Number(currentWallet.rebirthBalance);
 
-    await this.createTransaction({
-      userId,
-      amount: "5900",
-      type: "BOARD_ENTRY",
-      description: `Auto-Rebirth EV Board entry (${rebirthLabel}) from Rebirth Wallet`,
-      status: "COMPLETED"
-    });
+    while (currentBalance >= 5900 && rebirthCount < MAX_REBIRTH_ACCOUNTS) {
+      rebirthCount++;
+      const rebirthIndex = rebirthCount;
+      const rebirthLabel = `${user.username}${rebirthIndex}`;
 
-    const board = await this.createRebirthBoard(userId, rebirthIndex, rebirthLabel);
+      currentBalance -= 5900;
+      await this.updateWallet(userId, {
+        rebirthBalance: currentBalance.toString()
+      });
 
-    let placementParentId: number | null = null;
-    if (user.sponsorId) {
-      placementParentId = await this.findPlacementParent(user.sponsorId, "EV");
-    }
+      await this.createTransaction({
+        userId,
+        amount: "5900",
+        type: "BOARD_ENTRY",
+        description: `Auto-Rebirth EV Board entry (${rebirthLabel}) from Rebirth Wallet`,
+        status: "COMPLETED"
+      });
 
-    const siblingCount = placementParentId ? await this.getMatrixChildrenCount(placementParentId, "EV") : 0;
-    await this.addToMatrix(board.id, userId, placementParentId, siblingCount + 1, 1);
+      const board = await this.createRebirthBoard(userId, rebirthIndex, rebirthLabel);
 
-    if (placementParentId) {
-      await this.checkAndPromoteBoard(placementParentId, "EV");
-    }
+      let placementParentId: number | null = null;
+      if (user.sponsorId) {
+        placementParentId = await this.findPlacementParent(user.sponsorId, "EV");
+      }
 
-    if (user.sponsorId) {
-      const sponsor = await this.getUser(user.sponsorId);
-      const originalSponsorId = user.sponsorId;
+      const siblingCount = placementParentId ? await this.getMatrixChildrenCount(placementParentId, "EV") : 0;
+      await this.addToMatrix(board.id, userId, placementParentId, siblingCount + 1, 1);
 
-      const config = BOARD_CONFIG["EV"];
-      await this.addToMainWallet(
-        originalSponsorId,
-        config.directSponsor || 500,
-        `Direct sponsor income from ${rebirthLabel} (Rebirth)`
-      );
+      if (placementParentId) {
+        await this.checkAndPromoteBoard(placementParentId, "EV");
+      }
 
-      const upline = await this.getUplineChain(userId, "EV", config.levels);
-      for (let i = 0; i < upline.length && i < config.levels; i++) {
-        const nextBoard = getNextBoard("EV");
-        const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
+      if (user.sponsorId) {
+        const originalSponsorId = user.sponsorId;
 
-        if (existingNextBoard) {
-          await this.addToRebirthWallet(
-            upline[i],
-            config.levelIncome,
-            `Level ${i + 1} income from ${rebirthLabel} (EV Board Rebirth)`
-          );
-          await this.triggerAutoRebirth(upline[i]);
-        } else {
-          await this.addToUpgradeWallet(
-            upline[i],
-            config.levelIncome,
-            `Level ${i + 1} income from ${rebirthLabel} (EV Board)`
-          );
+        const config = BOARD_CONFIG["EV"];
+        await this.addToMainWallet(
+          originalSponsorId,
+          config.directSponsor || 500,
+          `Direct sponsor income from ${rebirthLabel} (Rebirth)`
+        );
 
-          const uplineWallet = await this.getWallet(upline[i]);
-          if (uplineWallet && Number(uplineWallet.upgradeBalance) >= 5900) {
-            const existingSilver = await this.getBoard(upline[i], "SILVER");
-            if (!existingSilver) {
-              await this.updateWallet(upline[i], {
-                upgradeBalance: (Number(uplineWallet.upgradeBalance) - 5900).toString()
-              });
-              const evAccount = await this.getActiveRebirthAccount(upline[i], "EV");
-              if (evAccount) {
-                await db.update(rebirthAccounts)
-                  .set({ balance: Math.max(0, Number(evAccount.balance) - 5900).toString() })
-                  .where(eq(rebirthAccounts.id, evAccount.id));
+        const upline = await this.getUplineChain(userId, "EV", config.levels);
+        for (let i = 0; i < upline.length && i < config.levels; i++) {
+          const nextBoard = getNextBoard("EV");
+          const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
+
+          if (existingNextBoard) {
+            await this.addToRebirthWallet(
+              upline[i],
+              config.levelIncome,
+              `Level ${i + 1} income from ${rebirthLabel} (EV Board Rebirth)`
+            );
+          } else {
+            await this.addToUpgradeWallet(
+              upline[i],
+              config.levelIncome,
+              `Level ${i + 1} income from ${rebirthLabel} (EV Board)`
+            );
+
+            const uplineWallet = await this.getWallet(upline[i]);
+            if (uplineWallet && Number(uplineWallet.upgradeBalance) >= 5900) {
+              const existingSilver = await this.getBoard(upline[i], "SILVER");
+              if (!existingSilver) {
+                await this.updateWallet(upline[i], {
+                  upgradeBalance: (Number(uplineWallet.upgradeBalance) - 5900).toString()
+                });
+                const evAccount = await this.getActiveRebirthAccount(upline[i], "EV");
+                if (evAccount) {
+                  await db.update(rebirthAccounts)
+                    .set({ balance: Math.max(0, Number(evAccount.balance) - 5900).toString() })
+                    .where(eq(rebirthAccounts.id, evAccount.id));
+                }
+                const silverBoard = await this.createBoard(upline[i], "SILVER");
+                const silverPlacementParent = await this.findJunglePlacementParent("SILVER");
+                const silverSiblingCount = silverPlacementParent ? await this.getMatrixChildrenCount(silverPlacementParent, "SILVER") : 0;
+                await this.addToMatrix(silverBoard.id, upline[i], silverPlacementParent, silverSiblingCount + 1, 1);
+                await this.createTransaction({
+                  userId: upline[i],
+                  amount: "5900",
+                  type: "BOARD_ENTRY",
+                  description: "Auto-entry to Silver Board from Upgrade Wallet",
+                  status: "COMPLETED"
+                });
               }
-              const silverBoard = await this.createBoard(upline[i], "SILVER");
-              const silverPlacementParent = await this.findJunglePlacementParent("SILVER");
-              const silverSiblingCount = silverPlacementParent ? await this.getMatrixChildrenCount(silverPlacementParent, "SILVER") : 0;
-              await this.addToMatrix(silverBoard.id, upline[i], silverPlacementParent, silverSiblingCount + 1, 1);
-              await this.createTransaction({
-                userId: upline[i],
-                amount: "5900",
-                type: "BOARD_ENTRY",
-                description: "Auto-entry to Silver Board from Upgrade Wallet",
-                status: "COMPLETED"
-              });
             }
           }
         }
       }
+
     }
   }
 
@@ -1910,12 +1931,14 @@ export class DatabaseStorage implements IStorage {
   // =========== EV REWARD METHODS ===========
 
   async createEvReward(userId: number, isFromRebirth: boolean = false, rebirthIndex?: number, rebirthBoardId?: number): Promise<EvReward> {
+    const claimType = isFromRebirth ? "UNCLAIMED" : "VEHICLE";
+
     const [reward] = await db.insert(evRewards).values({
       userId,
       boardType: "EV" as any,
       rewardAmount: "100000",
-      status: "PENDING" as any,
-      claimType: "UNCLAIMED" as any,
+      status: isFromRebirth ? "PENDING" as any : "APPROVED" as any,
+      claimType: claimType as any,
       isFromRebirth,
       rebirthIndex: rebirthIndex || null,
       rebirthBoardId: rebirthBoardId || null,
@@ -1926,8 +1949,8 @@ export class DatabaseStorage implements IStorage {
       amount: "100000",
       type: "BOARD_COMPLETION",
       description: isFromRebirth
-        ? `Rebirth EV Board #${rebirthIndex} completed - EV Vehicle or Rs.1,00,000 reward earned!`
-        : "EV Board completed - EV Vehicle reward earned (worth Rs.1,00,000)",
+        ? `Rebirth EV Board #${rebirthIndex} completed - Choose EV Vehicle or Rs.1,00,000 cash!`
+        : "EV Board completed - EV Vehicle reward earned (worth Rs.1,00,000)!",
       status: "COMPLETED"
     });
 

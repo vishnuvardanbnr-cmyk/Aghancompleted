@@ -614,6 +614,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid claim type. Must be VEHICLE or CASH." });
       }
 
+      const rewards = await storage.getUserEvRewards(userId);
+      const targetReward = rewards.find(r => r.id === rewardId);
+      if (!targetReward) {
+        return res.status(404).json({ message: "Reward not found." });
+      }
+      if (!targetReward.isFromRebirth && claimType === "CASH") {
+        return res.status(400).json({ message: "Main account EV reward can only be claimed as EV Vehicle." });
+      }
+
       const result = await storage.claimEvReward(rewardId, userId, claimType);
       if (!result) {
         return res.status(400).json({ message: "Reward not found or already claimed." });
