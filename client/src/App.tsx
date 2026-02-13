@@ -15,6 +15,7 @@ import Team from "@/pages/team";
 import Profile from "@/pages/profile";
 import InvoicesPage from "@/pages/invoices";
 import KycPage from "@/pages/kyc";
+import IncomeDetails from "@/pages/income-details";
 import NotFound from "@/pages/not-found";
 import AdminDashboard from "@/pages/admin/index";
 import AdminUsers from "@/pages/admin/users";
@@ -130,6 +131,7 @@ function Router() {
         <Route path="/profile" component={() => <ProtectedRoute component={Profile} />} />
         <Route path="/invoices" component={() => <ProtectedRoute component={InvoicesPage} />} />
         <Route path="/kyc" component={() => <ProtectedRoute component={KycPage} />} />
+        <Route path="/income-details" component={() => <ProtectedRoute component={IncomeDetails} />} />
         <Route path="/admin" component={() => <AdminRoute component={AdminDashboard} />} />
         <Route path="/admin/users" component={() => <AdminRoute component={AdminUsers} />} />
         <Route path="/admin/withdrawals" component={() => <AdminRoute component={AdminWithdrawals} />} />

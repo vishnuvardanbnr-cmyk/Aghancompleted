@@ -6,7 +6,9 @@ import { setupAuth, hashPassword, comparePasswords } from "./auth";
 import { storage } from "./storage";
 import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
-import { insertUserSchema } from "@shared/schema";
+import { insertUserSchema, transactions } from "@shared/schema";
+import { sql, and, eq } from "drizzle-orm";
+import { db } from "./db";
 import { sendRegistrationEmail, sendActivationEmail, sendActivationInvoiceEmail, sendTestEmail, isSmtpEnabled, sendPasswordOtpEmail } from "./email";
 import crypto from "crypto";
 import multer from "multer";
@@ -211,6 +213,68 @@ export async function registerRoutes(
       res.json(result);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch board transactions" });
+    }
+  });
+
+  app.get("/api/income-details", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const userId = (req.user as any).id;
+
+    try {
+      const boardTypes = ["EV", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "KING"];
+      const results: Record<string, { directSponsor: string; levelIncome: string; total: string }> = {};
+
+      for (const boardType of boardTypes) {
+        const boardFilter = sql`(
+          ${transactions.description} ILIKE ${'%(' + boardType + ' Board)%'}
+          OR ${transactions.description} ILIKE ${'%(' + boardType + ')%'}
+          OR ${transactions.description} ILIKE ${'%' + boardType + ' Board entry%'}
+          OR ${transactions.description} ILIKE ${'%' + boardType + ' Board Entry%'}
+        )`;
+
+        const [directSponsor] = await db
+          .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+          .from(transactions)
+          .where(and(
+            eq(transactions.userId, userId),
+            eq(transactions.type, "REFERRAL_INCOME"),
+            boardFilter,
+            eq(transactions.status, "COMPLETED")
+          ));
+
+        const [levelIncome] = await db
+          .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+          .from(transactions)
+          .where(and(
+            eq(transactions.userId, userId),
+            eq(transactions.type, "LEVEL_INCOME"),
+            boardFilter,
+            eq(transactions.status, "COMPLETED")
+          ));
+
+        const ds = parseFloat(directSponsor?.total || "0");
+        const li = parseFloat(levelIncome?.total || "0");
+
+        results[boardType] = {
+          directSponsor: ds.toFixed(2),
+          levelIncome: li.toFixed(2),
+          total: (ds + li).toFixed(2),
+        };
+      }
+
+      const totalDirectSponsor = Object.values(results).reduce((sum, r) => sum + parseFloat(r.directSponsor), 0);
+      const totalLevelIncome = Object.values(results).reduce((sum, r) => sum + parseFloat(r.levelIncome), 0);
+
+      res.json({
+        boards: results,
+        totals: {
+          directSponsor: totalDirectSponsor.toFixed(2),
+          levelIncome: totalLevelIncome.toFixed(2),
+          grandTotal: (totalDirectSponsor + totalLevelIncome).toFixed(2),
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch income details" });
     }
   });
 

@@ -23,12 +23,14 @@ import {
   Car,
   Mail,
   GitBranch,
+  IndianRupee,
 } from "lucide-react";
 
 const navItems = [
   { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { path: "/boards", label: "Boards", icon: Layers },
   { path: "/wallet", label: "Wallet", icon: Wallet },
+  { path: "/income-details", label: "Income Details", icon: IndianRupee },
   { path: "/team", label: "Team", icon: Users },
   { path: "/profile", label: "Profile", icon: User },
 ];
