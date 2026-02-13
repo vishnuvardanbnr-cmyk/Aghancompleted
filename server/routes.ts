@@ -573,6 +573,58 @@ export async function registerRoutes(
     }
   });
 
+  // =========== REBIRTH BOARDS ROUTES ===========
+
+  app.get("/api/rebirth-boards", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const userId = (req.user as any).id;
+      const rebirthBoards = await storage.getUserRebirthBoards(userId);
+      const rebirthCount = await storage.getUserRebirthBoardCount(userId);
+      const wallet = await storage.getWallet(userId);
+
+      const boardsWithProgress = rebirthBoards.map((board) => {
+        return {
+          ...board,
+          maxSlots: 6,
+        };
+      });
+
+      res.json({
+        boards: boardsWithProgress,
+        totalRebirth: rebirthCount,
+        maxRebirth: 38,
+        rebirthBalance: wallet?.rebirthBalance || "0",
+        nextRebirthAt: 5900,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch rebirth boards" });
+    }
+  });
+
+  // Claim EV Reward (Vehicle or Cash)
+  app.post("/api/ev-rewards/:id/claim", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const userId = (req.user as any).id;
+      const rewardId = parseInt(req.params.id);
+      const { claimType } = req.body;
+
+      if (!["VEHICLE", "CASH"].includes(claimType)) {
+        return res.status(400).json({ message: "Invalid claim type. Must be VEHICLE or CASH." });
+      }
+
+      const result = await storage.claimEvReward(rewardId, userId, claimType);
+      if (!result) {
+        return res.status(400).json({ message: "Reward not found or already claimed." });
+      }
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to claim reward" });
+    }
+  });
+
   // =========== ADMIN ROUTES ===========
   
   // Admin middleware helper

@@ -71,6 +71,8 @@ export interface IStorage {
   addToRebirthAccount(userId: number, boardType: string, amount: number, description: string): Promise<void>;
 }
 
+const MAX_REBIRTH_ACCOUNTS = 38;
+
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -220,6 +222,10 @@ export class DatabaseStorage implements IStorage {
       description,
       status: "COMPLETED"
     });
+
+    if (newBalance >= 5900) {
+      await this.triggerAutoRebirth(userId);
+    }
   }
 
   async createTransaction(transaction: any): Promise<Transaction> {
@@ -786,44 +792,101 @@ export class DatabaseStorage implements IStorage {
     const childCount = await this.getMatrixChildrenCount(userId, boardType);
     
     if (childCount >= 6) {
-      await this.updateBoardStatus(userId, boardType, "COMPLETED");
+      const activeBoard = await db.select().from(boards)
+        .where(and(
+          eq(boards.userId, userId),
+          eq(boards.type, boardType as any),
+          eq(boards.status, "ACTIVE" as any)
+        ))
+        .orderBy(desc(boards.joinedAt))
+        .limit(1);
+
+      if (activeBoard.length === 0) return;
+      const completingBoard = activeBoard[0];
+
+      await db.update(boards)
+        .set({ status: "COMPLETED", completedAt: new Date() })
+        .where(eq(boards.id, completingBoard.id));
 
       if (boardType === "EV") {
-        await this.createEvReward(userId);
-      }
-      
-      const nextBoard = getNextBoard(boardType);
-      if (nextBoard) {
-        const existingNext = await this.getBoard(userId, nextBoard);
-        if (!existingNext) {
-          const nextConfig = BOARD_CONFIG[nextBoard];
-          const wallet = await this.getWallet(userId);
-          
-          if (wallet && Number(wallet.upgradeBalance) >= nextConfig.entry) {
-            await this.updateWallet(userId, {
-              upgradeBalance: (Number(wallet.upgradeBalance) - nextConfig.entry).toString()
-            });
-            const currentBoardAccount = await this.getActiveRebirthAccount(userId, boardType);
-            if (currentBoardAccount) {
-              await db.update(rebirthAccounts)
-                .set({ balance: Math.max(0, Number(currentBoardAccount.balance) - nextConfig.entry).toString() })
-                .where(eq(rebirthAccounts.id, currentBoardAccount.id));
+        if (completingBoard.isRebirth) {
+          await this.createEvReward(userId, true, completingBoard.rebirthIndex || undefined, completingBoard.id);
+          await this.placeCompanyInBoard("SILVER");
+        } else {
+          await this.createEvReward(userId);
+          const nextBoard = getNextBoard(boardType);
+          if (nextBoard) {
+            const existingNext = await this.getBoard(userId, nextBoard);
+            if (!existingNext) {
+              const nextConfig = BOARD_CONFIG[nextBoard];
+              const wallet = await this.getWallet(userId);
+              
+              if (wallet && Number(wallet.upgradeBalance) >= nextConfig.entry) {
+                await this.updateWallet(userId, {
+                  upgradeBalance: (Number(wallet.upgradeBalance) - nextConfig.entry).toString()
+                });
+                const currentBoardAccount = await this.getActiveRebirthAccount(userId, boardType);
+                if (currentBoardAccount) {
+                  await db.update(rebirthAccounts)
+                    .set({ balance: Math.max(0, Number(currentBoardAccount.balance) - nextConfig.entry).toString() })
+                    .where(eq(rebirthAccounts.id, currentBoardAccount.id));
+                }
+                
+                const newBoard = await this.createBoard(userId, nextBoard);
+                const placementParent = await this.findJunglePlacementParent(nextBoard);
+                const siblingCount = placementParent ? await this.getMatrixChildrenCount(placementParent, nextBoard) : 0;
+                await this.addToMatrix(newBoard.id, userId, placementParent, siblingCount + 1, 1);
+                
+                await this.createTransaction({
+                  userId,
+                  amount: nextConfig.entry.toString(),
+                  type: "BOARD_ENTRY",
+                  description: `Auto-promotion to ${nextBoard} Board from Upgrade Wallet`,
+                  status: "COMPLETED"
+                });
+              }
             }
-            
-            const newBoard = await this.createBoard(userId, nextBoard);
-            
-            const placementParent = await this.findJunglePlacementParent(nextBoard);
-            
-            const siblingCount = placementParent ? await this.getMatrixChildrenCount(placementParent, nextBoard) : 0;
-            await this.addToMatrix(newBoard.id, userId, placementParent, siblingCount + 1, 1);
-            
-            await this.createTransaction({
-              userId,
-              amount: nextConfig.entry.toString(),
-              type: "BOARD_ENTRY",
-              description: `Auto-promotion to ${nextBoard} Board from Upgrade Wallet`,
-              status: "COMPLETED"
-            });
+          }
+        }
+      } else {
+        if (completingBoard.isCompanyPlacement) {
+          const nextBoard = getNextBoard(boardType);
+          if (nextBoard) {
+            await this.placeCompanyInBoard(nextBoard);
+          }
+        } else {
+          const nextBoard = getNextBoard(boardType);
+          if (nextBoard) {
+            const existingNext = await this.getBoard(userId, nextBoard);
+            if (!existingNext) {
+              const nextConfig = BOARD_CONFIG[nextBoard];
+              const wallet = await this.getWallet(userId);
+              
+              if (wallet && Number(wallet.upgradeBalance) >= nextConfig.entry) {
+                await this.updateWallet(userId, {
+                  upgradeBalance: (Number(wallet.upgradeBalance) - nextConfig.entry).toString()
+                });
+                const currentBoardAccount = await this.getActiveRebirthAccount(userId, boardType);
+                if (currentBoardAccount) {
+                  await db.update(rebirthAccounts)
+                    .set({ balance: Math.max(0, Number(currentBoardAccount.balance) - nextConfig.entry).toString() })
+                    .where(eq(rebirthAccounts.id, currentBoardAccount.id));
+                }
+                
+                const newBoard = await this.createBoard(userId, nextBoard);
+                const placementParent = await this.findJunglePlacementParent(nextBoard);
+                const siblingCount = placementParent ? await this.getMatrixChildrenCount(placementParent, nextBoard) : 0;
+                await this.addToMatrix(newBoard.id, userId, placementParent, siblingCount + 1, 1);
+                
+                await this.createTransaction({
+                  userId,
+                  amount: nextConfig.entry.toString(),
+                  type: "BOARD_ENTRY",
+                  description: `Auto-promotion to ${nextBoard} Board from Upgrade Wallet`,
+                  status: "COMPLETED"
+                });
+              }
+            }
           }
         }
       }
@@ -1667,33 +1730,226 @@ export class DatabaseStorage implements IStorage {
     }).where(eq(kycDocuments.id, kycId));
   }
 
+  // =========== COMPANY USER METHODS ===========
+
+  async getOrCreateCompanyUser(): Promise<User> {
+    const [existing] = await db.select().from(users).where(eq(users.isCompany, true));
+    if (existing) return existing;
+
+    const { scryptSync, randomBytes } = await import("crypto");
+    const salt = randomBytes(16).toString("hex");
+    const hash = scryptSync("CompanySecure@2024", salt, 64).toString("hex");
+    const hashedPassword = `${hash}.${salt}`;
+
+    const [company] = await db.insert(users).values({
+      username: "COMPANY_ACCOUNT",
+      password: hashedPassword,
+      fullName: "Aghan Promoters (Company)",
+      email: "company@aghanpromoters.com",
+      mobile: "0000000000",
+      referralCode: "COMPANY",
+      isAdmin: false,
+      isCompany: true,
+    }).returning();
+
+    await db.insert(wallets).values({ userId: company.id });
+    return company;
+  }
+
+  // =========== AUTO-REBIRTH METHODS ===========
+
+  async getUserRebirthBoardCount(userId: number): Promise<number> {
+    const result = await db.select({ count: count() }).from(boards)
+      .where(and(
+        eq(boards.userId, userId),
+        eq(boards.type, "EV" as any),
+        eq(boards.isRebirth, true)
+      ));
+    return result[0]?.count || 0;
+  }
+
+  async triggerAutoRebirth(userId: number): Promise<void> {
+    const wallet = await this.getWallet(userId);
+    if (!wallet || Number(wallet.rebirthBalance) < 5900) return;
+
+    const rebirthCount = await this.getUserRebirthBoardCount(userId);
+    if (rebirthCount >= MAX_REBIRTH_ACCOUNTS) return;
+
+    const user = await this.getUser(userId);
+    if (!user) return;
+
+    const rebirthIndex = rebirthCount + 1;
+    const rebirthLabel = `${user.username}${rebirthIndex}`;
+
+    await this.updateWallet(userId, {
+      rebirthBalance: (Number(wallet.rebirthBalance) - 5900).toString()
+    });
+
+    await this.createTransaction({
+      userId,
+      amount: "5900",
+      type: "BOARD_ENTRY",
+      description: `Auto-Rebirth EV Board entry (${rebirthLabel}) from Rebirth Wallet`,
+      status: "COMPLETED"
+    });
+
+    const board = await this.createRebirthBoard(userId, rebirthIndex, rebirthLabel);
+
+    let placementParentId: number | null = null;
+    if (user.sponsorId) {
+      placementParentId = await this.findPlacementParent(user.sponsorId, "EV");
+    }
+
+    const siblingCount = placementParentId ? await this.getMatrixChildrenCount(placementParentId, "EV") : 0;
+    await this.addToMatrix(board.id, userId, placementParentId, siblingCount + 1, 1);
+
+    if (placementParentId) {
+      await this.checkAndPromoteBoard(placementParentId, "EV");
+    }
+
+    if (user.sponsorId) {
+      const sponsor = await this.getUser(user.sponsorId);
+      const originalSponsorId = user.sponsorId;
+
+      const config = BOARD_CONFIG["EV"];
+      await this.addToMainWallet(
+        originalSponsorId,
+        config.directSponsor || 500,
+        `Direct sponsor income from ${rebirthLabel} (Rebirth)`
+      );
+
+      const upline = await this.getUplineChain(userId, "EV", config.levels);
+      for (let i = 0; i < upline.length && i < config.levels; i++) {
+        const nextBoard = getNextBoard("EV");
+        const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
+
+        if (existingNextBoard) {
+          await this.addToRebirthWallet(
+            upline[i],
+            config.levelIncome,
+            `Level ${i + 1} income from ${rebirthLabel} (EV Board Rebirth)`
+          );
+          await this.triggerAutoRebirth(upline[i]);
+        } else {
+          await this.addToUpgradeWallet(
+            upline[i],
+            config.levelIncome,
+            `Level ${i + 1} income from ${rebirthLabel} (EV Board)`
+          );
+
+          const uplineWallet = await this.getWallet(upline[i]);
+          if (uplineWallet && Number(uplineWallet.upgradeBalance) >= 5900) {
+            const existingSilver = await this.getBoard(upline[i], "SILVER");
+            if (!existingSilver) {
+              await this.updateWallet(upline[i], {
+                upgradeBalance: (Number(uplineWallet.upgradeBalance) - 5900).toString()
+              });
+              const evAccount = await this.getActiveRebirthAccount(upline[i], "EV");
+              if (evAccount) {
+                await db.update(rebirthAccounts)
+                  .set({ balance: Math.max(0, Number(evAccount.balance) - 5900).toString() })
+                  .where(eq(rebirthAccounts.id, evAccount.id));
+              }
+              const silverBoard = await this.createBoard(upline[i], "SILVER");
+              const silverPlacementParent = await this.findJunglePlacementParent("SILVER");
+              const silverSiblingCount = silverPlacementParent ? await this.getMatrixChildrenCount(silverPlacementParent, "SILVER") : 0;
+              await this.addToMatrix(silverBoard.id, upline[i], silverPlacementParent, silverSiblingCount + 1, 1);
+              await this.createTransaction({
+                userId: upline[i],
+                amount: "5900",
+                type: "BOARD_ENTRY",
+                description: "Auto-entry to Silver Board from Upgrade Wallet",
+                status: "COMPLETED"
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  async createRebirthBoard(userId: number, rebirthIndex: number, rebirthLabel: string): Promise<Board> {
+    const [board] = await db.insert(boards).values({
+      userId,
+      type: "EV" as any,
+      isRebirth: true,
+      rebirthIndex,
+      rebirthLabel,
+    }).returning();
+    return board;
+  }
+
+  async getUserRebirthBoards(userId: number): Promise<Board[]> {
+    return await db.select().from(boards)
+      .where(and(
+        eq(boards.userId, userId),
+        eq(boards.type, "EV" as any),
+        eq(boards.isRebirth, true)
+      ))
+      .orderBy(asc(boards.joinedAt));
+  }
+
+  async placeCompanyInBoard(boardType: string): Promise<void> {
+    const company = await this.getOrCreateCompanyUser();
+
+    const companyBoard = await db.insert(boards).values({
+      userId: company.id,
+      type: boardType as any,
+      isCompanyPlacement: true,
+    }).returning();
+
+    const placementParent = await this.findJunglePlacementParent(boardType);
+    const siblingCount = placementParent ? await this.getMatrixChildrenCount(placementParent, boardType) : 0;
+    await this.addToMatrix(companyBoard[0].id, company.id, placementParent, siblingCount + 1, 1);
+
+    if (placementParent) {
+      await this.checkAndPromoteBoard(placementParent, boardType);
+    }
+  }
+
   // =========== EV REWARD METHODS ===========
 
-  async createEvReward(userId: number): Promise<EvReward> {
-    const existing = await db.select().from(evRewards)
-      .where(and(
-        eq(evRewards.userId, userId),
-        eq(evRewards.boardType, "EV" as any)
-      ));
-    
-    if (existing.length > 0) return existing[0];
-
+  async createEvReward(userId: number, isFromRebirth: boolean = false, rebirthIndex?: number, rebirthBoardId?: number): Promise<EvReward> {
     const [reward] = await db.insert(evRewards).values({
       userId,
       boardType: "EV" as any,
       rewardAmount: "100000",
       status: "PENDING" as any,
+      claimType: "UNCLAIMED" as any,
+      isFromRebirth,
+      rebirthIndex: rebirthIndex || null,
+      rebirthBoardId: rebirthBoardId || null,
     }).returning();
 
     await this.createTransaction({
       userId,
       amount: "100000",
       type: "BOARD_COMPLETION",
-      description: "EV Board completed - EV Vehicle reward earned (worth Rs.1,00,000)",
+      description: isFromRebirth
+        ? `Rebirth EV Board #${rebirthIndex} completed - EV Vehicle or Rs.1,00,000 reward earned!`
+        : "EV Board completed - EV Vehicle reward earned (worth Rs.1,00,000)",
       status: "COMPLETED"
     });
 
     return reward;
+  }
+
+  async claimEvReward(rewardId: number, userId: number, claimType: "VEHICLE" | "CASH"): Promise<EvReward | null> {
+    const [reward] = await db.select().from(evRewards)
+      .where(and(eq(evRewards.id, rewardId), eq(evRewards.userId, userId)));
+    
+    if (!reward || reward.claimType !== "UNCLAIMED") return null;
+
+    const [updated] = await db.update(evRewards)
+      .set({ claimType: claimType as any })
+      .where(eq(evRewards.id, rewardId))
+      .returning();
+
+    if (claimType === "CASH") {
+      await this.addToMainWallet(userId, 100000, `EV Reward claimed as cash - Rs.1,00,000 (Reward #${rewardId})`);
+    }
+
+    return updated;
   }
 
   async getUserEvRewards(userId: number): Promise<EvReward[]> {

@@ -29,6 +29,7 @@ export const users = pgTable("users", {
   sponsorId: integer("sponsor_id"),
   referralCode: text("referral_code").notNull().unique(),
   isAdmin: boolean("is_admin").default(false),
+  isCompany: boolean("is_company").default(false),
   profilePicture: text("profile_picture"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -50,8 +51,12 @@ export const boards = pgTable("boards", {
   userId: integer("user_id").notNull().references(() => users.id),
   type: boardTypeEnum("type").notNull(),
   status: text("status").default("ACTIVE"), // ACTIVE, COMPLETED
-  isFromSubAccount: boolean("is_from_sub_account").default(false), // If entry is from rebirth sub-account (special income rules)
-  sourceRebirthAccountId: integer("source_rebirth_account_id"), // Which rebirth account paid for this entry
+  isFromSubAccount: boolean("is_from_sub_account").default(false),
+  sourceRebirthAccountId: integer("source_rebirth_account_id"),
+  isRebirth: boolean("is_rebirth").default(false),
+  rebirthIndex: integer("rebirth_index"),
+  rebirthLabel: text("rebirth_label"),
+  isCompanyPlacement: boolean("is_company_placement").default(false),
   joinedAt: timestamp("joined_at").defaultNow(),
   completedAt: timestamp("completed_at"),
 });
@@ -113,6 +118,9 @@ export const kycStatusEnum = pgEnum("kyc_status", ["NOT_SUBMITTED", "PENDING", "
 // EV Reward Status Enum
 export const evRewardStatusEnum = pgEnum("ev_reward_status", ["PENDING", "PROCESSING", "DELIVERED"]);
 
+// EV Reward Claim Type Enum
+export const evRewardClaimTypeEnum = pgEnum("ev_reward_claim_type", ["VEHICLE", "CASH", "UNCLAIMED"]);
+
 // Invoices Table (EV Vehicle Booking Invoice on account activation)
 export const invoices = pgTable("invoices", {
   id: serial("id").primaryKey(),
@@ -159,6 +167,10 @@ export const evRewards = pgTable("ev_rewards", {
   boardType: boardTypeEnum("board_type").notNull(),
   rewardAmount: decimal("reward_amount", { precision: 12, scale: 2 }).default("100000"),
   status: evRewardStatusEnum("status").default("PENDING"),
+  claimType: evRewardClaimTypeEnum("claim_type").default("UNCLAIMED"),
+  isFromRebirth: boolean("is_from_rebirth").default(false),
+  rebirthIndex: integer("rebirth_index"),
+  rebirthBoardId: integer("rebirth_board_id"),
   vehicleModel: text("vehicle_model"),
   vehicleDetails: text("vehicle_details"),
   adminNote: text("admin_note"),

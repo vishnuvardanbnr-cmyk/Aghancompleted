@@ -29,6 +29,9 @@ import {
   ShieldCheck,
   ArrowUpCircle,
   Banknote,
+  RefreshCw,
+  Gift,
+  IndianRupee,
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -123,7 +126,31 @@ export default function Dashboard() {
     queryKey: ["/api/ev-rewards"],
   });
 
+  const { data: rebirthData } = useQuery<any>({
+    queryKey: ["/api/rebirth-boards"],
+  });
+
   const evRewardStatus = evRewards && evRewards.length > 0 ? evRewards[0].status : null;
+  const unclaimedReward = evRewards?.find((r: any) => r.claimType === "UNCLAIMED");
+  const [showClaimDialog, setShowClaimDialog] = useState(false);
+  const [claimRewardId, setClaimRewardId] = useState<number | null>(null);
+
+  const claimRewardMutation = useMutation({
+    mutationFn: async ({ rewardId, claimType }: { rewardId: number; claimType: string }) => {
+      const res = await apiRequest("POST", `/api/ev-rewards/${rewardId}/claim`, { claimType });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: data.claimType === "CASH" ? "Rs.1,00,000 added to your wallet!" : "Vehicle reward claimed! Admin will process delivery." });
+      queryClient.invalidateQueries({ queryKey: ["/api/ev-rewards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      setShowClaimDialog(false);
+      setClaimRewardId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to claim reward", description: error.message, variant: "destructive" });
+    }
+  });
 
   const joinBoardMutation = useMutation({
     mutationFn: async (boardType: string) => {
@@ -315,29 +342,55 @@ export default function Dashboard() {
         </Card>
 
         {/* EV Reward Banner */}
-        {evRewardStatus ? (
-          <Card className={`border-primary/20 ${evRewardStatus === "DELIVERED" ? "bg-gradient-to-r from-green-500/10 to-green-600/10" : evRewardStatus === "PROCESSING" ? "bg-gradient-to-r from-blue-500/10 to-blue-600/10" : "bg-gradient-to-r from-amber-500/10 to-amber-600/10"}`}>
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                    <Car className="w-6 h-6 text-primary" />
+        {evRewards && evRewards.length > 0 ? (
+          <div className="space-y-3">
+            {evRewards.map((reward: any) => (
+              <Card key={reward.id} className={`border-primary/20 ${reward.claimType === "CASH" ? "bg-gradient-to-r from-green-500/10 to-green-600/10" : reward.status === "DELIVERED" ? "bg-gradient-to-r from-green-500/10 to-green-600/10" : reward.status === "PROCESSING" ? "bg-gradient-to-r from-blue-500/10 to-blue-600/10" : "bg-gradient-to-r from-amber-500/10 to-amber-600/10"}`}>
+                <CardContent className="p-4">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+                        {reward.claimType === "CASH" ? <IndianRupee className="w-6 h-6 text-primary" /> : <Car className="w-6 h-6 text-primary" />}
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold">
+                          {reward.claimType === "CASH"
+                            ? "Rs.1,00,000 Claimed!"
+                            : reward.status === "DELIVERED"
+                            ? "EV Vehicle Delivered!"
+                            : reward.status === "PROCESSING"
+                            ? "EV Vehicle Being Processed"
+                            : reward.claimType === "VEHICLE"
+                            ? "EV Vehicle Reward - Pending Delivery"
+                            : "EV Reward Earned! Choose Your Reward"}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {reward.isFromRebirth ? `Rebirth Account #${reward.rebirthIndex}` : "Main Account"}
+                          {reward.claimType === "UNCLAIMED" && " - EV Vehicle or Rs.1,00,000 cash"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {reward.claimType === "UNCLAIMED" && (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setClaimRewardId(reward.id);
+                            setShowClaimDialog(true);
+                          }}
+                        >
+                          <Gift className="w-3.5 h-3.5 mr-1" /> Claim
+                        </Button>
+                      )}
+                      <Badge variant={reward.claimType !== "UNCLAIMED" ? "default" : "secondary"} className="text-xs">
+                        {reward.claimType === "UNCLAIMED" ? reward.status : reward.claimType}
+                      </Badge>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-bold">
-                      {evRewardStatus === "DELIVERED" ? "EV Vehicle Delivered!" : evRewardStatus === "PROCESSING" ? "EV Vehicle Being Processed" : "EV Vehicle Reward Earned!"}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {evRewardStatus === "DELIVERED" ? "Congratulations! Your EV vehicle worth Rs.1,00,000 has been delivered." : evRewardStatus === "PROCESSING" ? "Your EV vehicle delivery is being processed." : "You've completed the EV Board! Your free EV vehicle worth Rs.1,00,000 is pending delivery."}
-                    </p>
-                  </div>
-                </div>
-                <Badge variant={evRewardStatus === "DELIVERED" ? "default" : "secondary"} className="text-xs">
-                  {evRewardStatus}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : (
           <Card className="bg-gradient-to-r from-primary/10 via-accent/10 to-chart-3/10 border-primary/20">
             <CardContent className="p-4">
@@ -357,6 +410,48 @@ export default function Dashboard() {
                   <Button size="sm" data-testid="button-learn-more">Learn More</Button>
                 </Link>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Rebirth Boards Section */}
+        {rebirthData && (rebirthData.totalRebirth > 0 || parseFloat(rebirthData.rebirthBalance) > 0) && (
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-primary" />
+                Auto-Rebirth EV Boards
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {rebirthData.totalRebirth} of {rebirthData.maxRebirth} rebirth accounts used
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Rebirth Wallet</span>
+                <span className="font-medium">Rs.{parseFloat(rebirthData.rebirthBalance).toLocaleString()} / Rs.5,900</span>
+              </div>
+              <Progress value={Math.min((parseFloat(rebirthData.rebirthBalance) / 5900) * 100, 100)} className="h-2" />
+              <p className="text-xs text-muted-foreground">
+                {parseFloat(rebirthData.rebirthBalance) >= 5900
+                  ? "Next auto-rebirth will trigger soon!"
+                  : `Rs.${(5900 - parseFloat(rebirthData.rebirthBalance)).toLocaleString()} more needed for next rebirth`}
+              </p>
+              {rebirthData.boards && rebirthData.boards.length > 0 && (
+                <div className="space-y-2 border-t pt-3">
+                  {rebirthData.boards.map((board: any) => (
+                    <div key={board.id} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="font-medium">{board.rebirthLabel}</span>
+                      </div>
+                      <Badge variant={board.status === "COMPLETED" ? "default" : "secondary"} className="text-xs">
+                        {board.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -432,6 +527,54 @@ export default function Dashboard() {
               {joinBoardMutation.isPending ? "Joining..." : "Confirm & Join"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Claim EV Reward Dialog */}
+      <Dialog open={showClaimDialog} onOpenChange={setShowClaimDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-primary" />
+              Claim Your EV Reward
+            </DialogTitle>
+            <DialogDescription>
+              Choose how you'd like to receive your reward worth Rs.1,00,000
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <Card
+              className="cursor-pointer hover:border-primary transition-colors"
+              onClick={() => claimRewardId && claimRewardMutation.mutate({ rewardId: claimRewardId, claimType: "VEHICLE" })}
+            >
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+                  <Car className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">EV Vehicle</p>
+                  <p className="text-xs text-muted-foreground">Get a free EV 2-wheeler worth Rs.1,00,000</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card
+              className="cursor-pointer hover:border-green-500 transition-colors"
+              onClick={() => claimRewardId && claimRewardMutation.mutate({ rewardId: claimRewardId, claimType: "CASH" })}
+            >
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                  <IndianRupee className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Cash Rs.1,00,000</p>
+                  <p className="text-xs text-muted-foreground">Get Rs.1,00,000 added to your main wallet</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          {claimRewardMutation.isPending && (
+            <p className="text-center text-sm text-muted-foreground">Processing your claim...</p>
+          )}
         </DialogContent>
       </Dialog>
     </Layout>
