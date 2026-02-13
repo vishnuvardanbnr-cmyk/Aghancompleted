@@ -1,0 +1,211 @@
+Build a full-stack, production-ready MLM web application named **"Aghan Promoters"**.
+
+The platform is an EV 2-wheeler promotion & booking system based on a **6x matrix board plan (auto-fill, first come first fill + jungle method)**.
+
+--------------------------------------------------
+TECH STACK
+--------------------------------------------------
+- Frontend: React (Vite or Next.js preferred)
+- Backend: Node.js + Express
+- Database: Postgress
+- Authentication: JWT + bcrypt
+- UI: Tailwind CSS
+- Fully mobile-optimized (mobile-first)
+- Professional, modern EV-themed design
+- Smooth animations, clean dashboard UI
+- Scroll-to-top behavior on every page reload or route change
+
+--------------------------------------------------
+DESIGN REQUIREMENTS
+--------------------------------------------------
+- EV & green-energy inspired theme (electric blue, neon green, dark background)
+- Clean cards, icons, progress indicators for boards
+- Dashboard-first experience
+- Mobile-friendly navigation
+- Professional fintech / EV startup look
+- Sticky header, smooth transitions
+- Auto scroll to top on:
+  - Page reload
+  - Route redirect
+  - Board entry
+
+--------------------------------------------------
+CORE BUSINESS LOGIC
+--------------------------------------------------
+
+Project Type: MLM Promotion Program  
+Product: EV 2-Wheeler Vehicle  
+Joining Package: ₹5900 (one-time)
+This amount is also considered as **vehicle booking**
+
+--------------------------------------------------
+BOARD STRUCTURE
+--------------------------------------------------
+
+1. EV Board – ₹5900
+2. Silver Board – ₹5900
+3. Gold Board – ₹10,000
+4. Platinum Board – ₹20,000
+5. Diamond Board – ₹50,000
+6. King Board – ₹1,00,000
+
+--------------------------------------------------
+EV BOARD (BOARD 1) – 6 MATRIX AUTO FILL
+--------------------------------------------------
+Entry Amount: ₹5900
+
+Split:
+- ₹900 → GST
+- ₹3900 → Company Account
+- ₹500 → Direct Sponsor Income (Main Wallet)
+- ₹150 × 4 levels → Level Income (Rebirth Wallet)
+
+Placement Logic:
+- 6x matrix (auto-fill)
+- First come, first fill
+- Spillover enabled
+- If sponsor’s 6 slots are not filled, new users are placed under sponsor
+- After sponsor’s matrix is full, placement spills to downline
+
+Reward Condition:
+- Once Level 1 (6 users) + Level 2 (36 users) are completed
+- AND user has directly referred **6 users**
+→ User can **claim an EV vehicle worth ₹1,00,000 for free**
+
+--------------------------------------------------
+REBIRTH LOGIC
+--------------------------------------------------
+- Level income goes to **Rebirth Wallet**
+- When Rebirth Wallet reaches ₹5900 for the first time:
+  → User automatically enters **Silver Board**
+- After first rebirth:
+  - Every ₹5900 accumulation creates a **new rebirth ID**
+  - Direct sponsor income of rebirth IDs goes to **Mother ID**
+- Any rebirth created inside rebirth accounts is **company-controlled**
+- Users cannot access company rebirth accounts
+
+--------------------------------------------------
+SILVER BOARD (BOARD 2)
+--------------------------------------------------
+Entry: From EV Board accumulated ₹5900
+
+Split:
+- ₹900 → GST
+- ₹500 distributed across 6 levels (jungle method)
+- Excess → Company
+
+Placement:
+- Jungle method
+- Example:
+  - John has users: 1–6
+  - 7 placed under 1
+  - 8 under 2
+  - 9 under 3
+  - After all users receive first placement, second placement starts
+  - Continues level by level
+
+Withdrawal Rule:
+- First ₹10,000 earned is **locked**
+- ₹10,000 is auto-used to enter **Gold Board**
+- After Gold entry, Silver income becomes withdrawable
+
+--------------------------------------------------
+GOLD BOARD (BOARD 3)
+--------------------------------------------------
+Entry: ₹10,000 (from Silver)
+
+Split:
+- ₹1000 distributed across 6 levels
+- Excess → Company
+
+Withdrawal Rule:
+- First ₹20,000 locked
+- Auto-entry into **Platinum Board**
+- After Platinum entry, Gold income is withdrawable
+
+--------------------------------------------------
+PLATINUM BOARD (BOARD 4)
+--------------------------------------------------
+Entry: ₹20,000 (from Gold)
+
+Split:
+- ₹2000 distributed across 6 levels
+- Excess → Company
+
+Withdrawal Rule:
+- First ₹50,000 locked
+- Auto-entry into **Diamond Board**
+- After Diamond entry, Platinum income is withdrawable
+
+--------------------------------------------------
+DIAMOND BOARD (BOARD 5)
+--------------------------------------------------
+Entry: ₹50,000 (from Platinum)
+
+Split:
+- ₹5000 distributed across 6 levels
+- Excess → Company
+
+Withdrawal Rule:
+- First ₹1,00,000 locked
+- Auto-entry into **King Board**
+- After King entry, Diamond income is withdrawable
+
+--------------------------------------------------
+KING BOARD (BOARD 6)
+--------------------------------------------------
+- Entry: ₹1,00,000
+- All income generated here is **fully withdrawable**
+- No locking conditions
+
+--------------------------------------------------
+USER MODULES
+--------------------------------------------------
+- Registration & Login
+- Referral link system
+- Auto placement logic
+- Board-wise dashboards
+- Wallets:
+  - Main Wallet
+  - Rebirth Wallet
+  - Board-wise Wallets
+- Income history
+- Withdrawal system
+- EV reward claim status
+- Team tree & matrix visualization
+
+--------------------------------------------------
+ADMIN PANEL
+--------------------------------------------------
+- User management
+- Board monitoring
+- Wallet controls
+- Rebirth ID monitoring
+- Company earnings dashboard
+- EV claim approvals
+- Withdrawal approvals
+- GST reports
+
+--------------------------------------------------
+EXTRA FEATURES
+--------------------------------------------------
+- Auto-scroll to top on every route change
+- Loading indicators
+- Real-time notifications
+- Secure APIs
+- Clean, maintainable code
+- Environment variable support
+- Ready for deployment
+
+--------------------------------------------------
+FINAL OUTPUT EXPECTATION
+--------------------------------------------------
+Generate:
+- Full frontend UI
+- Backend APIs
+- Database models
+- Clear folder structure
+- Comments explaining complex MLM logic
+- Mobile-first, professional EV-themed UI
+generate all the required pages like profile page, transaction page , team tage etc.
+make sure to generate a logo and favicon, don’t use replit logo
