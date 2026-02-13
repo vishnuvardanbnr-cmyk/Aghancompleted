@@ -12,11 +12,13 @@ import {
   Award,
   Star,
   Shield,
+  ArrowUpCircle,
 } from "lucide-react";
 
 interface BoardIncome {
   directSponsor: string;
   levelIncome: string;
+  upgradeAccumulated: string;
   total: string;
 }
 
@@ -25,16 +27,17 @@ interface IncomeData {
   totals: {
     directSponsor: string;
     levelIncome: string;
+    upgradeAccumulated: string;
     grandTotal: string;
   };
 }
 
-const boardConfig: Record<string, { label: string; icon: any; color: string; bg: string }> = {
-  EV: { label: "EV Board", icon: Zap, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/30" },
-  SILVER: { label: "Silver Board", icon: Shield, color: "text-slate-500", bg: "bg-slate-50 dark:bg-slate-950/30" },
-  GOLD: { label: "Gold Board", icon: Star, color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950/30" },
-  PLATINUM: { label: "Platinum Board", icon: Award, color: "text-cyan-600", bg: "bg-cyan-50 dark:bg-cyan-950/30" },
-  DIAMOND: { label: "Diamond Board", icon: Gem, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
+const boardConfig: Record<string, { label: string; icon: any; color: string; bg: string; nextBoard?: string }> = {
+  EV: { label: "EV Board", icon: Zap, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/30", nextBoard: "Silver" },
+  SILVER: { label: "Silver Board", icon: Shield, color: "text-slate-500", bg: "bg-slate-50 dark:bg-slate-950/30", nextBoard: "Gold" },
+  GOLD: { label: "Gold Board", icon: Star, color: "text-yellow-600", bg: "bg-yellow-50 dark:bg-yellow-950/30", nextBoard: "Platinum" },
+  PLATINUM: { label: "Platinum Board", icon: Award, color: "text-cyan-600", bg: "bg-cyan-50 dark:bg-cyan-950/30", nextBoard: "Diamond" },
+  DIAMOND: { label: "Diamond Board", icon: Gem, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30", nextBoard: "King" },
   KING: { label: "King Board", icon: Crown, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-950/30" },
 };
 
@@ -77,7 +80,7 @@ export default function IncomeDetails() {
         <div>
           <h1 className="text-lg font-bold">Income Details</h1>
           <p className="text-sm text-muted-foreground">
-            View your total earnings from direct sponsor and level income across all boards
+            View your earnings across all boards
           </p>
         </div>
 
@@ -89,7 +92,7 @@ export default function IncomeDetails() {
                   <Zap className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Total Direct Sponsor Income</p>
+                  <p className="text-xs text-muted-foreground">Direct Sponsor Income (EV Board)</p>
                   <p className="text-xl font-bold text-emerald-600">
                     {formatCurrency(totals?.directSponsor || "0")}
                   </p>
@@ -105,7 +108,7 @@ export default function IncomeDetails() {
                   <TrendingUp className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Total Level Income</p>
+                  <p className="text-xs text-muted-foreground">Total Level Income (All Boards)</p>
                   <p className="text-xl font-bold text-blue-600">
                     {formatCurrency(totals?.levelIncome || "0")}
                   </p>
@@ -140,8 +143,12 @@ export default function IncomeDetails() {
             {Object.entries(boardConfig).map(([key, config]) => {
               const boardData = boards?.[key];
               const Icon = config.icon;
+              const isEV = key === "EV";
+              const isKing = key === "KING";
+
               const ds = parseFloat(boardData?.directSponsor || "0");
               const li = parseFloat(boardData?.levelIncome || "0");
+              const ua = parseFloat(boardData?.upgradeAccumulated || "0");
               const total = parseFloat(boardData?.total || "0");
 
               return (
@@ -153,18 +160,45 @@ export default function IncomeDetails() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Direct Sponsor</span>
-                      <span className="font-semibold text-sm">{formatCurrency(ds)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Level Income</span>
-                      <span className="font-semibold text-sm">{formatCurrency(li)}</span>
-                    </div>
-                    <div className="border-t pt-2 flex justify-between items-center">
-                      <span className="text-sm font-medium">Total</span>
-                      <span className={`font-bold ${config.color}`}>{formatCurrency(total)}</span>
-                    </div>
+                    {isEV ? (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Direct Sponsor Income</span>
+                          <span className="font-semibold text-sm">{formatCurrency(ds)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-1.5">
+                            <ArrowUpCircle className="w-3.5 h-3.5 text-orange-500" />
+                            <span className="text-sm text-muted-foreground">Accumulated for Silver</span>
+                          </div>
+                          <span className="font-semibold text-sm text-orange-600">{formatCurrency(ua)}</span>
+                        </div>
+                        <div className="border-t pt-2 flex justify-between items-center">
+                          <span className="text-sm font-medium">Earned Income</span>
+                          <span className={`font-bold ${config.color}`}>{formatCurrency(total)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Level Income</span>
+                          <span className="font-semibold text-sm">{formatCurrency(li)}</span>
+                        </div>
+                        {!isKing && config.nextBoard && (
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-1.5">
+                              <ArrowUpCircle className="w-3.5 h-3.5 text-orange-500" />
+                              <span className="text-sm text-muted-foreground">Accumulated for {config.nextBoard}</span>
+                            </div>
+                            <span className="font-semibold text-sm text-orange-600">{formatCurrency(ua)}</span>
+                          </div>
+                        )}
+                        <div className="border-t pt-2 flex justify-between items-center">
+                          <span className="text-sm font-medium">Total Income</span>
+                          <span className={`font-bold ${config.color}`}>{formatCurrency(total)}</span>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               );

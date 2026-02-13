@@ -222,54 +222,102 @@ export async function registerRoutes(
 
     try {
       const boardTypes = ["EV", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "KING"];
-      const results: Record<string, { directSponsor: string; levelIncome: string; total: string }> = {};
+      const results: Record<string, { directSponsor: string; levelIncome: string; upgradeAccumulated: string; total: string }> = {};
 
       for (const boardType of boardTypes) {
-        const boardFilter = sql`(
+        const boardDescFilter = sql`(
           ${transactions.description} ILIKE ${'%(' + boardType + ' Board)%'}
           OR ${transactions.description} ILIKE ${'%(' + boardType + ')%'}
-          OR ${transactions.description} ILIKE ${'%' + boardType + ' Board entry%'}
-          OR ${transactions.description} ILIKE ${'%' + boardType + ' Board Entry%'}
         )`;
 
-        const [directSponsor] = await db
-          .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-          .from(transactions)
-          .where(and(
-            eq(transactions.userId, userId),
-            eq(transactions.type, "REFERRAL_INCOME"),
-            boardFilter,
-            eq(transactions.status, "COMPLETED")
-          ));
+        if (boardType === "EV") {
+          const [directSponsor] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+            .from(transactions)
+            .where(and(
+              eq(transactions.userId, userId),
+              eq(transactions.type, "REFERRAL_INCOME"),
+              sql`${transactions.description} ILIKE '%Direct sponsor income%'`,
+              sql`${transactions.description} NOT ILIKE '%(%)%'`,
+              eq(transactions.status, "COMPLETED")
+            ));
 
-        const [levelIncome] = await db
-          .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
-          .from(transactions)
-          .where(and(
-            eq(transactions.userId, userId),
-            eq(transactions.type, "LEVEL_INCOME"),
-            boardFilter,
-            eq(transactions.status, "COMPLETED")
-          ));
+          const [upgradeAccumulated] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+            .from(transactions)
+            .where(and(
+              eq(transactions.userId, userId),
+              eq(transactions.type, "LEVEL_INCOME"),
+              boardDescFilter,
+              eq(transactions.status, "COMPLETED")
+            ));
 
-        const ds = parseFloat(directSponsor?.total || "0");
-        const li = parseFloat(levelIncome?.total || "0");
+          const ds = parseFloat(directSponsor?.total || "0");
+          const ua = parseFloat(upgradeAccumulated?.total || "0");
 
-        results[boardType] = {
-          directSponsor: ds.toFixed(2),
-          levelIncome: li.toFixed(2),
-          total: (ds + li).toFixed(2),
-        };
+          results[boardType] = {
+            directSponsor: ds.toFixed(2),
+            levelIncome: "0.00",
+            upgradeAccumulated: ua.toFixed(2),
+            total: ds.toFixed(2),
+          };
+        } else {
+          const [levelIncomeMainWallet] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+            .from(transactions)
+            .where(and(
+              eq(transactions.userId, userId),
+              eq(transactions.type, "REFERRAL_INCOME"),
+              sql`${transactions.description} ILIKE '%Level%income%'`,
+              boardDescFilter,
+              eq(transactions.status, "COMPLETED")
+            ));
+
+          const [levelIncomeUpgradeAndRebirth] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+            .from(transactions)
+            .where(and(
+              eq(transactions.userId, userId),
+              eq(transactions.type, "LEVEL_INCOME"),
+              boardDescFilter,
+              eq(transactions.status, "COMPLETED")
+            ));
+
+          const [upgradeOnly] = await db
+            .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), 0)` })
+            .from(transactions)
+            .where(and(
+              eq(transactions.userId, userId),
+              eq(transactions.type, "LEVEL_INCOME"),
+              sql`${transactions.description} ILIKE '%[Upgrade]%'`,
+              boardDescFilter,
+              eq(transactions.status, "COMPLETED")
+            ));
+
+          const liMain = parseFloat(levelIncomeMainWallet?.total || "0");
+          const liUpgradeRebirth = parseFloat(levelIncomeUpgradeAndRebirth?.total || "0");
+          const ua = parseFloat(upgradeOnly?.total || "0");
+          const totalLevelIncome = liMain + liUpgradeRebirth;
+
+          results[boardType] = {
+            directSponsor: "0.00",
+            levelIncome: totalLevelIncome.toFixed(2),
+            upgradeAccumulated: ua.toFixed(2),
+            total: totalLevelIncome.toFixed(2),
+          };
+        }
       }
 
-      const totalDirectSponsor = Object.values(results).reduce((sum, r) => sum + parseFloat(r.directSponsor), 0);
-      const totalLevelIncome = Object.values(results).reduce((sum, r) => sum + parseFloat(r.levelIncome), 0);
+      const totalDirectSponsor = parseFloat(results["EV"].directSponsor);
+      const totalLevelIncome = boardTypes.filter(b => b !== "EV").reduce((sum, b) => sum + parseFloat(results[b].levelIncome), 0);
+      const totalUpgradeAccumulated = Object.values(results).reduce((sum, r) => sum + parseFloat(r.upgradeAccumulated), 0);
 
       res.json({
         boards: results,
         totals: {
           directSponsor: totalDirectSponsor.toFixed(2),
           levelIncome: totalLevelIncome.toFixed(2),
+          upgradeAccumulated: totalUpgradeAccumulated.toFixed(2),
           grandTotal: (totalDirectSponsor + totalLevelIncome).toFixed(2),
         },
       });
