@@ -255,6 +255,7 @@ export default function Dashboard() {
         </div>
 
         {/* Income Details Link */}
+        <div className="mt-4" />
         <Link href="/income-details">
           <Card className="cursor-pointer hover:border-primary/50 transition-colors">
             <CardContent className="flex items-center justify-between p-4">
