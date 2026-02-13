@@ -254,6 +254,24 @@ export default function Dashboard() {
           />
         </div>
 
+        {/* Income Details Link */}
+        <Link href="/income-details">
+          <Card className="cursor-pointer hover:border-primary/50 transition-colors">
+            <CardContent className="flex items-center justify-between p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Income Details</p>
+                  <p className="text-xs text-muted-foreground">View your earnings across all boards</p>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+
         {/* Active Boards */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 py-3 px-4">

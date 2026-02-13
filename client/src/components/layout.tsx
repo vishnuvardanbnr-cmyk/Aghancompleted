@@ -143,7 +143,7 @@ function Sidebar() {
 function MobileFooter() {
   const [location] = useLocation();
   const { user } = useAuth();
-  const mobileItems = navItems;
+  const mobileItems = navItems.filter(item => item.path !== "/income-details");
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border md:hidden">
