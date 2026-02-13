@@ -609,42 +609,45 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Distribute income for EV Board
-    if (boardType === "EV" && user.sponsorId) {
-      // Direct sponsor income - Rs.500 to Main Wallet
-      await this.addToMainWallet(
-        user.sponsorId, 
-        config.directSponsor || 500, 
-        `Direct sponsor income from ${user.fullName}`
-      );
+    if (boardType === "EV") {
+      const [adminUser] = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
 
-      // Level income - Rs.150 x 4 levels
+      if (user.sponsorId) {
+        await this.addToMainWallet(
+          user.sponsorId, 
+          config.directSponsor || 500, 
+          `Direct sponsor income from ${user.fullName}`
+        );
+      } else if (adminUser) {
+        await this.addToMainWallet(
+          adminUser.id,
+          config.directSponsor || 500,
+          `Direct sponsor income from ${user.fullName} (no sponsor - routed to admin)`
+        );
+      }
+
       const upline = await this.getUplineChain(userId, boardType, config.levels);
       for (let i = 0; i < upline.length && i < config.levels; i++) {
-        // Check if upline user already has the next board (Silver)
         const nextBoard = getNextBoard(boardType);
         const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
         
         if (existingNextBoard) {
-          // User already promoted to Silver - further EV level income goes to Rebirth Wallet
           await this.addToRebirthWallet(
             upline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (EV Board)`
           );
         } else {
-          // Route to Upgrade Wallet (accumulates for first Silver entry)
           await this.addToUpgradeWallet(
             upline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (EV Board)`
           );
           
-          // Check if upgrade wallet reached 5900 for auto Silver entry
           const uplineWallet = await this.getWallet(upline[i]);
           if (uplineWallet && Number(uplineWallet.upgradeBalance) >= 5900) {
             const existingSilver = await this.getBoard(upline[i], "SILVER");
             if (!existingSilver) {
-              // Deduct from upgrade wallet and sync rebirth account
               await this.updateWallet(upline[i], {
                 upgradeBalance: (Number(uplineWallet.upgradeBalance) - 5900).toString()
               });
@@ -655,16 +658,11 @@ export class DatabaseStorage implements IStorage {
                   .where(eq(rebirthAccounts.id, evAccount.id));
               }
               
-              // Create Silver board entry
               const silverBoard = await this.createBoard(upline[i], "SILVER");
-              
-              // Find placement parent for Silver board using JUNGLE FCFS
               const silverPlacementParent = await this.findJunglePlacementParent("SILVER");
-              
               const silverSiblingCount = silverPlacementParent ? await this.getMatrixChildrenCount(silverPlacementParent, "SILVER") : 0;
               await this.addToMatrix(silverBoard.id, upline[i], silverPlacementParent, silverSiblingCount + 1, 1);
               
-              // Create transaction for Silver auto-entry
               await this.createTransaction({
                 userId: upline[i],
                 amount: "5900",
@@ -676,64 +674,67 @@ export class DatabaseStorage implements IStorage {
           }
         }
       }
+
+      if (adminUser && upline.length < config.levels) {
+        const missedLevels = config.levels - upline.length;
+        const missedAmount = missedLevels * config.levelIncome;
+        await this.addToMainWallet(
+          adminUser.id,
+          missedAmount,
+          `Level income (${missedLevels} levels) from ${user.fullName} (EV Board - no upline, routed to admin)`
+        );
+      }
     }
 
-    // Distribute level income for non-EV boards (Silver, Gold, Platinum, Diamond, King)
-    // For boards from SUB accounts: direct sponsor goes to company, level income placement-based (normal)
     if (boardType !== "EV") {
-      // Check if the joining user's board is from a sub-account
-      // If so, direct sponsor income goes to company (skipped), but level income still distributed normally
+      const [adminUser] = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
       const isJoinerFromSubAccount = await this.isBoardFromSubAccount(userId, boardType);
       
-      // For non-EV boards with direct sponsor income configured
-      // If joining user's board is from a sub-account, divert direct sponsor to company
-      if (isJoinerFromSubAccount && user.sponsorId && config.directSponsor) {
-        // Direct sponsor income diverted to company - logged for transparency
-        await this.createTransaction({
-          userId: user.sponsorId,
-          amount: "0",
-          type: "REFERRAL_INCOME",
-          description: `Direct sponsor income Rs.${config.directSponsor} from ${user.fullName} (${boardType}) - Diverted to Company (Sub-Account Entry)`,
-          status: "COMPLETED"
-        });
+      if (isJoinerFromSubAccount && config.directSponsor) {
+        if (adminUser) {
+          await this.addToMainWallet(
+            adminUser.id,
+            config.directSponsor,
+            `Direct sponsor income from ${user.fullName} (${boardType}) - Sub-account entry, routed to admin`
+          );
+        }
       } else if (user.sponsorId && config.directSponsor) {
-        // Normal direct sponsor income distribution
         await this.addToMainWallet(
           user.sponsorId,
           config.directSponsor,
           `Direct sponsor income from ${user.fullName} (${boardType})`
         );
+      } else if (!user.sponsorId && config.directSponsor && adminUser) {
+        await this.addToMainWallet(
+          adminUser.id,
+          config.directSponsor,
+          `Direct sponsor income from ${user.fullName} (${boardType} - no sponsor, routed to admin)`
+        );
       }
       
-      // Level income distributed based on upgrade status
       const upline = await this.getUplineChain(userId, boardType, config.levels);
       for (let i = 0; i < upline.length && i < config.levels; i++) {
-        // Check if upline user already has the next board
         const nextBoard = getNextBoard(boardType);
         const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
         
         if (existingNextBoard) {
-          // User already upgraded past this board - income goes to Main Wallet
           await this.addToMainWallet(
             upline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (${boardType} Board)`
           );
         } else if (nextBoard) {
-          // Route to Upgrade Wallet (accumulates for next board entry)
           await this.addToUpgradeWallet(
             upline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (${boardType} Board)`
           );
           
-          // Check if upgrade wallet reached next board entry fee
           const nextConfig = BOARD_CONFIG[nextBoard];
           const uplineWallet = await this.getWallet(upline[i]);
           if (uplineWallet && Number(uplineWallet.upgradeBalance) >= nextConfig.entry) {
             const existingNext = await this.getBoard(upline[i], nextBoard);
             if (!existingNext) {
-              // Deduct from upgrade wallet and sync rebirth account
               await this.updateWallet(upline[i], {
                 upgradeBalance: (Number(uplineWallet.upgradeBalance) - nextConfig.entry).toString()
               });
@@ -744,9 +745,7 @@ export class DatabaseStorage implements IStorage {
                   .where(eq(rebirthAccounts.id, currentBoardAccount.id));
               }
               
-              // Create next board entry
               const newBoard = await this.createBoard(upline[i], nextBoard);
-              
               const placementParent = await this.findJunglePlacementParent(nextBoard);
               const siblingCount = placementParent ? await this.getMatrixChildrenCount(placementParent, nextBoard) : 0;
               await this.addToMatrix(newBoard.id, upline[i], placementParent, siblingCount + 1, 1);
@@ -761,13 +760,22 @@ export class DatabaseStorage implements IStorage {
             }
           }
         } else {
-          // King board (no next board) - income goes to Main Wallet
           await this.addToMainWallet(
             upline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (${boardType} Board)`
           );
         }
+      }
+
+      if (adminUser && upline.length < config.levels) {
+        const missedLevels = config.levels - upline.length;
+        const missedAmount = missedLevels * config.levelIncome;
+        await this.addToMainWallet(
+          adminUser.id,
+          missedAmount,
+          `Level income (${missedLevels} levels) from ${user.fullName} (${boardType} Board - no upline, routed to admin)`
+        );
       }
     }
 
@@ -1828,62 +1836,78 @@ export class DatabaseStorage implements IStorage {
         await this.checkAndPromoteBoard(placementParentId, "EV");
       }
 
-      if (user.sponsorId) {
-        const originalSponsorId = user.sponsorId;
+      const config = BOARD_CONFIG["EV"];
+      const [adminUser] = await db.select().from(users).where(eq(users.isAdmin, true)).limit(1);
 
-        const config = BOARD_CONFIG["EV"];
+      if (user.sponsorId) {
         await this.addToMainWallet(
-          originalSponsorId,
+          user.sponsorId,
           config.directSponsor || 500,
           `Direct sponsor income from ${rebirthLabel} (Rebirth)`
         );
+      } else if (adminUser) {
+        await this.addToMainWallet(
+          adminUser.id,
+          config.directSponsor || 500,
+          `Direct sponsor income from ${rebirthLabel} (Rebirth - no sponsor, routed to admin)`
+        );
+      }
 
-        const upline = await this.getUplineChain(userId, "EV", config.levels);
-        for (let i = 0; i < upline.length && i < config.levels; i++) {
-          const nextBoard = getNextBoard("EV");
-          const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
+      const upline = await this.getUplineChain(userId, "EV", config.levels);
+      for (let i = 0; i < upline.length && i < config.levels; i++) {
+        const nextBoard = getNextBoard("EV");
+        const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
 
-          if (existingNextBoard) {
-            await this.addToRebirthWallet(
-              upline[i],
-              config.levelIncome,
-              `Level ${i + 1} income from ${rebirthLabel} (EV Board Rebirth)`
-            );
-          } else {
-            await this.addToUpgradeWallet(
-              upline[i],
-              config.levelIncome,
-              `Level ${i + 1} income from ${rebirthLabel} (EV Board)`
-            );
+        if (existingNextBoard) {
+          await this.addToRebirthWallet(
+            upline[i],
+            config.levelIncome,
+            `Level ${i + 1} income from ${rebirthLabel} (EV Board Rebirth)`
+          );
+        } else {
+          await this.addToUpgradeWallet(
+            upline[i],
+            config.levelIncome,
+            `Level ${i + 1} income from ${rebirthLabel} (EV Board)`
+          );
 
-            const uplineWallet = await this.getWallet(upline[i]);
-            if (uplineWallet && Number(uplineWallet.upgradeBalance) >= 5900) {
-              const existingSilver = await this.getBoard(upline[i], "SILVER");
-              if (!existingSilver) {
-                await this.updateWallet(upline[i], {
-                  upgradeBalance: (Number(uplineWallet.upgradeBalance) - 5900).toString()
-                });
-                const evAccount = await this.getActiveRebirthAccount(upline[i], "EV");
-                if (evAccount) {
-                  await db.update(rebirthAccounts)
-                    .set({ balance: Math.max(0, Number(evAccount.balance) - 5900).toString() })
-                    .where(eq(rebirthAccounts.id, evAccount.id));
-                }
-                const silverBoard = await this.createBoard(upline[i], "SILVER");
-                const silverPlacementParent = await this.findJunglePlacementParent("SILVER");
-                const silverSiblingCount = silverPlacementParent ? await this.getMatrixChildrenCount(silverPlacementParent, "SILVER") : 0;
-                await this.addToMatrix(silverBoard.id, upline[i], silverPlacementParent, silverSiblingCount + 1, 1);
-                await this.createTransaction({
-                  userId: upline[i],
-                  amount: "5900",
-                  type: "BOARD_ENTRY",
-                  description: "Auto-entry to Silver Board from Upgrade Wallet",
-                  status: "COMPLETED"
-                });
+          const uplineWallet = await this.getWallet(upline[i]);
+          if (uplineWallet && Number(uplineWallet.upgradeBalance) >= 5900) {
+            const existingSilver = await this.getBoard(upline[i], "SILVER");
+            if (!existingSilver) {
+              await this.updateWallet(upline[i], {
+                upgradeBalance: (Number(uplineWallet.upgradeBalance) - 5900).toString()
+              });
+              const evAccount = await this.getActiveRebirthAccount(upline[i], "EV");
+              if (evAccount) {
+                await db.update(rebirthAccounts)
+                  .set({ balance: Math.max(0, Number(evAccount.balance) - 5900).toString() })
+                  .where(eq(rebirthAccounts.id, evAccount.id));
               }
+              const silverBoard = await this.createBoard(upline[i], "SILVER");
+              const silverPlacementParent = await this.findJunglePlacementParent("SILVER");
+              const silverSiblingCount = silverPlacementParent ? await this.getMatrixChildrenCount(silverPlacementParent, "SILVER") : 0;
+              await this.addToMatrix(silverBoard.id, upline[i], silverPlacementParent, silverSiblingCount + 1, 1);
+              await this.createTransaction({
+                userId: upline[i],
+                amount: "5900",
+                type: "BOARD_ENTRY",
+                description: "Auto-entry to Silver Board from Upgrade Wallet",
+                status: "COMPLETED"
+              });
             }
           }
         }
+      }
+
+      if (adminUser && upline.length < config.levels) {
+        const missedLevels = config.levels - upline.length;
+        const missedAmount = missedLevels * config.levelIncome;
+        await this.addToMainWallet(
+          adminUser.id,
+          missedAmount,
+          `Level income (${missedLevels} levels) from ${rebirthLabel} (EV Rebirth - no upline, routed to admin)`
+        );
       }
 
     }
