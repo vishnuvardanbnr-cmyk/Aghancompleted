@@ -45,7 +45,7 @@ Preferred communication style: Simple, everyday language.
 - **Board System**: Six boards with escalating entry fees (₹5,900 → ₹1,00,000). Each board has a 6-slot matrix.
 - **Matrix Placement**: EV Board uses sponsor-based FCFS; all other boards use "Jungle FCFS" (global fill ignoring sponsor relationships).
 - **Wallet System**: Three wallet types — `mainBalance` (withdrawable), `rebirthBalance` (auto-entry for rebirth EV boards), `upgradeBalance` (accumulates for next board).
-- **Income Distribution**: Direct sponsor income and multi-level income with board-specific payout structures.
+- **Income Distribution**: Direct sponsor income and multi-level income with board-specific payout structures. The direct sponsor is excluded from level income distribution — if the sponsor is the immediate matrix parent, level income skips them and goes to the next person up the chain. This prevents double income (both direct sponsor + level) from the same joining.
 - **Auto-Rebirth System**: When ₹5,900 accumulates in a user's Rebirth Wallet, a new EV Board entry (rebirth account) is auto-created. Max 38 rebirth accounts per user. Rebirth boards use labels like `username1`, `username2`. Direct sponsor income from rebirth goes to the original referrer. On rebirth EV Board completion, a company account is placed in Silver Board instead of user promotion. Company account flows continue through Gold, Platinum, Diamond, King.
 - **EV Reward Claim**: On EV Board completion (main or rebirth), user earns a reward worth ₹1,00,000. User can choose to claim as EV Vehicle or Cash (₹1,00,000 to main wallet).
 - **Company Account**: A special system user (`COMPANY_ACCOUNT`) that fills Silver/Gold/etc. board slots when rebirth boards complete (instead of promoting the user).

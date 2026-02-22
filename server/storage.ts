@@ -626,45 +626,49 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const upline = await this.getUplineChain(userId, boardType, config.levels);
-      for (let i = 0; i < upline.length && i < config.levels; i++) {
+      const rawUpline = await this.getUplineChain(userId, boardType, config.levels + 1);
+      const effectiveUpline = (user.sponsorId && rawUpline.length > 0 && rawUpline[0] === user.sponsorId)
+        ? rawUpline.slice(1, config.levels + 1)
+        : rawUpline.slice(0, config.levels);
+
+      for (let i = 0; i < effectiveUpline.length; i++) {
         const nextBoard = getNextBoard(boardType);
-        const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
+        const existingNextBoard = nextBoard ? await this.getBoard(effectiveUpline[i], nextBoard) : null;
         
         if (existingNextBoard) {
           await this.addToRebirthWallet(
-            upline[i],
+            effectiveUpline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (EV Board)`
           );
         } else {
           await this.addToUpgradeWallet(
-            upline[i],
+            effectiveUpline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (EV Board)`
           );
           
-          const uplineWallet = await this.getWallet(upline[i]);
+          const uplineWallet = await this.getWallet(effectiveUpline[i]);
           if (uplineWallet && Number(uplineWallet.upgradeBalance) >= 5900) {
-            const existingSilver = await this.getBoard(upline[i], "SILVER");
+            const existingSilver = await this.getBoard(effectiveUpline[i], "SILVER");
             if (!existingSilver) {
-              await this.updateWallet(upline[i], {
+              await this.updateWallet(effectiveUpline[i], {
                 upgradeBalance: (Number(uplineWallet.upgradeBalance) - 5900).toString()
               });
-              const evAccount = await this.getActiveRebirthAccount(upline[i], "EV");
+              const evAccount = await this.getActiveRebirthAccount(effectiveUpline[i], "EV");
               if (evAccount) {
                 await db.update(rebirthAccounts)
                   .set({ balance: Math.max(0, Number(evAccount.balance) - 5900).toString() })
                   .where(eq(rebirthAccounts.id, evAccount.id));
               }
               
-              const silverBoard = await this.createBoard(upline[i], "SILVER");
+              const silverBoard = await this.createBoard(effectiveUpline[i], "SILVER");
               const silverPlacementParent = await this.findJunglePlacementParent("SILVER");
               const silverSiblingCount = silverPlacementParent ? await this.getMatrixChildrenCount(silverPlacementParent, "SILVER") : 0;
-              await this.addToMatrix(silverBoard.id, upline[i], silverPlacementParent, silverSiblingCount + 1, 1);
+              await this.addToMatrix(silverBoard.id, effectiveUpline[i], silverPlacementParent, silverSiblingCount + 1, 1);
               
               await this.createTransaction({
-                userId: upline[i],
+                userId: effectiveUpline[i],
                 amount: "5900",
                 type: "BOARD_ENTRY",
                 description: "Auto-entry to Silver Board from Upgrade Wallet",
@@ -675,8 +679,8 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      if (adminUser && upline.length < config.levels) {
-        const missedLevels = config.levels - upline.length;
+      if (adminUser && effectiveUpline.length < config.levels) {
+        const missedLevels = config.levels - effectiveUpline.length;
         const missedAmount = missedLevels * config.levelIncome;
         await this.addToMainWallet(
           adminUser.id,
@@ -712,46 +716,50 @@ export class DatabaseStorage implements IStorage {
         );
       }
       
-      const upline = await this.getUplineChain(userId, boardType, config.levels);
-      for (let i = 0; i < upline.length && i < config.levels; i++) {
+      const rawUpline = await this.getUplineChain(userId, boardType, config.levels + 1);
+      const effectiveUpline = (user.sponsorId && rawUpline.length > 0 && rawUpline[0] === user.sponsorId)
+        ? rawUpline.slice(1, config.levels + 1)
+        : rawUpline.slice(0, config.levels);
+
+      for (let i = 0; i < effectiveUpline.length; i++) {
         const nextBoard = getNextBoard(boardType);
-        const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
+        const existingNextBoard = nextBoard ? await this.getBoard(effectiveUpline[i], nextBoard) : null;
         
         if (existingNextBoard) {
           await this.addToMainWallet(
-            upline[i],
+            effectiveUpline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (${boardType} Board)`
           );
         } else if (nextBoard) {
           await this.addToUpgradeWallet(
-            upline[i],
+            effectiveUpline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (${boardType} Board)`
           );
           
           const nextConfig = BOARD_CONFIG[nextBoard];
-          const uplineWallet = await this.getWallet(upline[i]);
+          const uplineWallet = await this.getWallet(effectiveUpline[i]);
           if (uplineWallet && Number(uplineWallet.upgradeBalance) >= nextConfig.entry) {
-            const existingNext = await this.getBoard(upline[i], nextBoard);
+            const existingNext = await this.getBoard(effectiveUpline[i], nextBoard);
             if (!existingNext) {
-              await this.updateWallet(upline[i], {
+              await this.updateWallet(effectiveUpline[i], {
                 upgradeBalance: (Number(uplineWallet.upgradeBalance) - nextConfig.entry).toString()
               });
-              const currentBoardAccount = await this.getActiveRebirthAccount(upline[i], boardType);
+              const currentBoardAccount = await this.getActiveRebirthAccount(effectiveUpline[i], boardType);
               if (currentBoardAccount) {
                 await db.update(rebirthAccounts)
                   .set({ balance: Math.max(0, Number(currentBoardAccount.balance) - nextConfig.entry).toString() })
                   .where(eq(rebirthAccounts.id, currentBoardAccount.id));
               }
               
-              const newBoard = await this.createBoard(upline[i], nextBoard);
+              const newBoard = await this.createBoard(effectiveUpline[i], nextBoard);
               const placementParent = await this.findJunglePlacementParent(nextBoard);
               const siblingCount = placementParent ? await this.getMatrixChildrenCount(placementParent, nextBoard) : 0;
-              await this.addToMatrix(newBoard.id, upline[i], placementParent, siblingCount + 1, 1);
+              await this.addToMatrix(newBoard.id, effectiveUpline[i], placementParent, siblingCount + 1, 1);
               
               await this.createTransaction({
-                userId: upline[i],
+                userId: effectiveUpline[i],
                 amount: nextConfig.entry.toString(),
                 type: "BOARD_ENTRY",
                 description: `Auto-entry to ${nextBoard} Board from Upgrade Wallet`,
@@ -761,15 +769,15 @@ export class DatabaseStorage implements IStorage {
           }
         } else {
           await this.addToMainWallet(
-            upline[i],
+            effectiveUpline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${user.fullName} (${boardType} Board)`
           );
         }
       }
 
-      if (adminUser && upline.length < config.levels) {
-        const missedLevels = config.levels - upline.length;
+      if (adminUser && effectiveUpline.length < config.levels) {
+        const missedLevels = config.levels - effectiveUpline.length;
         const missedAmount = missedLevels * config.levelIncome;
         await this.addToMainWallet(
           adminUser.id,
@@ -1853,43 +1861,47 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const upline = await this.getUplineChain(userId, "EV", config.levels);
-      for (let i = 0; i < upline.length && i < config.levels; i++) {
+      const rawUpline = await this.getUplineChain(userId, "EV", config.levels + 1);
+      const effectiveUpline = (user.sponsorId && rawUpline.length > 0 && rawUpline[0] === user.sponsorId)
+        ? rawUpline.slice(1, config.levels + 1)
+        : rawUpline.slice(0, config.levels);
+
+      for (let i = 0; i < effectiveUpline.length; i++) {
         const nextBoard = getNextBoard("EV");
-        const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
+        const existingNextBoard = nextBoard ? await this.getBoard(effectiveUpline[i], nextBoard) : null;
 
         if (existingNextBoard) {
           await this.addToRebirthWallet(
-            upline[i],
+            effectiveUpline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${rebirthLabel} (EV Board Rebirth)`
           );
         } else {
           await this.addToUpgradeWallet(
-            upline[i],
+            effectiveUpline[i],
             config.levelIncome,
             `Level ${i + 1} income from ${rebirthLabel} (EV Board)`
           );
 
-          const uplineWallet = await this.getWallet(upline[i]);
+          const uplineWallet = await this.getWallet(effectiveUpline[i]);
           if (uplineWallet && Number(uplineWallet.upgradeBalance) >= 5900) {
-            const existingSilver = await this.getBoard(upline[i], "SILVER");
+            const existingSilver = await this.getBoard(effectiveUpline[i], "SILVER");
             if (!existingSilver) {
-              await this.updateWallet(upline[i], {
+              await this.updateWallet(effectiveUpline[i], {
                 upgradeBalance: (Number(uplineWallet.upgradeBalance) - 5900).toString()
               });
-              const evAccount = await this.getActiveRebirthAccount(upline[i], "EV");
+              const evAccount = await this.getActiveRebirthAccount(effectiveUpline[i], "EV");
               if (evAccount) {
                 await db.update(rebirthAccounts)
                   .set({ balance: Math.max(0, Number(evAccount.balance) - 5900).toString() })
                   .where(eq(rebirthAccounts.id, evAccount.id));
               }
-              const silverBoard = await this.createBoard(upline[i], "SILVER");
+              const silverBoard = await this.createBoard(effectiveUpline[i], "SILVER");
               const silverPlacementParent = await this.findJunglePlacementParent("SILVER");
               const silverSiblingCount = silverPlacementParent ? await this.getMatrixChildrenCount(silverPlacementParent, "SILVER") : 0;
-              await this.addToMatrix(silverBoard.id, upline[i], silverPlacementParent, silverSiblingCount + 1, 1);
+              await this.addToMatrix(silverBoard.id, effectiveUpline[i], silverPlacementParent, silverSiblingCount + 1, 1);
               await this.createTransaction({
-                userId: upline[i],
+                userId: effectiveUpline[i],
                 amount: "5900",
                 type: "BOARD_ENTRY",
                 description: "Auto-entry to Silver Board from Upgrade Wallet",
@@ -1900,8 +1912,8 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      if (adminUser && upline.length < config.levels) {
-        const missedLevels = config.levels - upline.length;
+      if (adminUser && effectiveUpline.length < config.levels) {
+        const missedLevels = config.levels - effectiveUpline.length;
         const missedAmount = missedLevels * config.levelIncome;
         await this.addToMainWallet(
           adminUser.id,
