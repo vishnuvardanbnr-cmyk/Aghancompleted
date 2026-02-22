@@ -43,7 +43,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Key Business Features
 - **Board System**: Six boards with escalating entry fees (₹5,900 → ₹1,00,000). Each board has a 6-slot matrix.
-- **Matrix Placement**: EV Board uses sponsor-based FCFS; all other boards use "Jungle FCFS" (global fill ignoring sponsor relationships).
+- **Matrix Placement**: All boards (including EV Board) use global FCFS placement — new members are placed under the earliest person with open slots, regardless of who referred them. Direct sponsor income still goes to the referrer.
 - **Wallet System**: Three wallet types — `mainBalance` (withdrawable), `rebirthBalance` (auto-entry for rebirth EV boards), `upgradeBalance` (accumulates for next board).
 - **Income Distribution**: Direct sponsor income and multi-level income with board-specific payout structures. A sponsor can receive both direct sponsor income (Rs.500) and level income (Rs.150) from the same referral if that referral is placed under them in the matrix.
 - **Auto-Rebirth System**: When ₹5,900 accumulates in a user's Rebirth Wallet, a new EV Board entry (rebirth account) is auto-created. Max 38 rebirth accounts per user. Rebirth boards use labels like `username1`, `username2`. Direct sponsor income from rebirth goes to the original referrer. On rebirth EV Board completion, a company account is placed in Silver Board instead of user promotion. Company account flows continue through Gold, Platinum, Diamond, King.

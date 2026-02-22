@@ -576,29 +576,15 @@ export class DatabaseStorage implements IStorage {
     const board = await this.createBoard(userId, boardType);
 
     // Find placement parent
-    // EV Board: Normal FCFS (sponsor-based)
-    // Other Boards: Jungle FCFS (global first-available)
+    // All boards use global FCFS - place under earliest person with open slots
     let placementParentId: number | null = null;
-    
-    if (boardType === "EV") {
-      // Normal FCFS for EV - place under sponsor's tree
-      if (user.sponsorId) {
-        placementParentId = await this.findPlacementParent(user.sponsorId, boardType);
-      }
-    } else {
-      // Jungle FCFS for non-EV boards - place in first available slot globally
-      placementParentId = await this.findJunglePlacementParent(boardType);
-    }
+    placementParentId = await this.findJunglePlacementParent(boardType);
 
     // Get position under parent
     const siblingCount = placementParentId ? await this.getMatrixChildrenCount(placementParentId, boardType) : 0;
     const position = siblingCount + 1;
 
-    // Calculate level in tree
     let level = 1;
-    if (boardType === "EV" && placementParentId && placementParentId !== user.sponsorId) {
-      level = 2; // Spillover placement (only relevant for EV board)
-    }
 
     // Add to matrix (parentId can be null for root users)
     await this.addToMatrix(board.id, userId, placementParentId, position, level);
@@ -1825,9 +1811,7 @@ export class DatabaseStorage implements IStorage {
       const board = await this.createRebirthBoard(userId, rebirthIndex, rebirthLabel);
 
       let placementParentId: number | null = null;
-      if (user.sponsorId) {
-        placementParentId = await this.findPlacementParent(user.sponsorId, "EV");
-      }
+      placementParentId = await this.findJunglePlacementParent("EV");
 
       const siblingCount = placementParentId ? await this.getMatrixChildrenCount(placementParentId, "EV") : 0;
       await this.addToMatrix(board.id, userId, placementParentId, siblingCount + 1, 1);
