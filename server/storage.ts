@@ -1945,7 +1945,7 @@ export class DatabaseStorage implements IStorage {
       userId,
       boardType: "EV" as any,
       rewardAmount: "100000",
-      status: isFromRebirth ? "PENDING" as any : "APPROVED" as any,
+      status: "PENDING" as any,
       claimType: claimType as any,
       isFromRebirth,
       rebirthIndex: rebirthIndex || null,
