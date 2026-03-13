@@ -407,7 +407,7 @@ export async function registerRoutes(
     const sponsorId = (req.user as any).id;
 
     try {
-      const { username, fullName, email, mobile, password } = req.body;
+      const { username, fullName, email, mobile, password, payFromWallet } = req.body;
 
       if (!username || !fullName || !email || !mobile || !password) {
         return res.status(400).json({ message: "All fields are required" });
@@ -420,11 +420,14 @@ export async function registerRoutes(
       const existingEmail = await storage.getUserByEmail(email);
       if (existingEmail) return res.status(400).json({ message: "Email already registered" });
 
-      // Verify sponsor wallet balance
-      const sponsorWallet = await storage.getWallet(sponsorId);
       const REGISTRATION_FEE = 5900;
-      if (!sponsorWallet || Number(sponsorWallet.mainBalance) < REGISTRATION_FEE) {
-        return res.status(400).json({ message: `Insufficient wallet balance. You need ₹${REGISTRATION_FEE.toLocaleString()} to register a member.` });
+
+      // If paying from wallet, verify balance first
+      const sponsorWallet = await storage.getWallet(sponsorId);
+      if (payFromWallet) {
+        if (!sponsorWallet || Number(sponsorWallet.mainBalance) < REGISTRATION_FEE) {
+          return res.status(400).json({ message: `Insufficient wallet balance. You need ₹${REGISTRATION_FEE.toLocaleString()} to pay the EV Board entry fee.` });
+        }
       }
 
       // Hash the password
@@ -444,39 +447,44 @@ export async function registerRoutes(
         isAdmin: false,
       });
 
-      // Create wallet for new user — then reset to 0 (overrides test default)
+      // Create wallet for new user — reset to 0 (overrides test default)
       await storage.createWallet(newUser.id);
       await storage.updateWallet(newUser.id, { mainBalance: "0" });
 
-      // Deduct registration fee from sponsor's wallet
-      await storage.updateWallet(sponsorId, {
-        mainBalance: (Number(sponsorWallet.mainBalance) - REGISTRATION_FEE).toString(),
-      });
-      await storage.createTransaction({
-        userId: sponsorId,
-        amount: REGISTRATION_FEE.toString(),
-        type: "BOARD_ENTRY",
-        description: `Registration fee paid for member @${username}`,
-        status: "COMPLETED",
-      });
+      if (payFromWallet) {
+        // Deduct registration fee from sponsor's wallet
+        await storage.updateWallet(sponsorId, {
+          mainBalance: (Number(sponsorWallet!.mainBalance) - REGISTRATION_FEE).toString(),
+        });
+        await storage.createTransaction({
+          userId: sponsorId,
+          amount: REGISTRATION_FEE.toString(),
+          type: "BOARD_ENTRY",
+          description: `EV Board entry fee paid for member @${username}`,
+          status: "COMPLETED",
+        });
 
-      // Credit the fee to the new user's wallet
-      await storage.updateWallet(newUser.id, { mainBalance: REGISTRATION_FEE.toString() });
-      await storage.createTransaction({
-        userId: newUser.id,
-        amount: REGISTRATION_FEE.toString(),
-        type: "DEPOSIT",
-        description: `Registration funded by sponsor @${(req.user as any).username}`,
-        status: "COMPLETED",
-      });
+        // Credit the fee to the new user's wallet
+        await storage.updateWallet(newUser.id, { mainBalance: REGISTRATION_FEE.toString() });
+        await storage.createTransaction({
+          userId: newUser.id,
+          amount: REGISTRATION_FEE.toString(),
+          type: "DEPOSIT",
+          description: `EV Board entry funded by sponsor @${(req.user as any).username}`,
+          status: "COMPLETED",
+        });
 
-      // Join the EV board — this deducts fee from new user's wallet and distributes income
-      const joinResult = await storage.joinBoard(newUser.id, "EV");
-      if (!joinResult.success) {
-        return res.status(400).json({ message: joinResult.message });
+        // Join the EV board — deducts fee from new user's wallet and distributes income
+        const joinResult = await storage.joinBoard(newUser.id, "EV");
+        if (!joinResult.success) {
+          return res.status(400).json({ message: joinResult.message });
+        }
+
+        res.status(201).json({ success: true, paidByWallet: true, message: `Member @${username} registered and placed in EV Board successfully.`, user: { id: newUser.id, username: newUser.username, fullName: newUser.fullName } });
+      } else {
+        // Register only — member will pay themselves later
+        res.status(201).json({ success: true, paidByWallet: false, message: `Member @${username} registered successfully. They can log in and pay the EV Board entry fee themselves.`, user: { id: newUser.id, username: newUser.username, fullName: newUser.fullName } });
       }
-
-      res.status(201).json({ success: true, message: `Member @${username} registered and placed in EV Board successfully.`, user: { id: newUser.id, username: newUser.username, fullName: newUser.fullName } });
     } catch (err) {
       next(err);
     }

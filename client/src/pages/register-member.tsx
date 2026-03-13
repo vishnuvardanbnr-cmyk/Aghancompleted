@@ -5,12 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Wallet, UserPlus, CheckCircle2, IndianRupee, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Wallet, UserPlus, CheckCircle2, IndianRupee, Eye, EyeOff, AlertCircle, Info } from "lucide-react";
 
 interface WalletData {
   mainBalance: string;
@@ -22,6 +22,7 @@ export default function RegisterMember() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
+  const [payFromWallet, setPayFromWallet] = useState(false);
   const [form, setForm] = useState({
     username: "",
     fullName: "",
@@ -29,7 +30,7 @@ export default function RegisterMember() {
     mobile: "",
     password: "",
   });
-  const [lastRegistered, setLastRegistered] = useState<{ username: string; fullName: string } | null>(null);
+  const [lastRegistered, setLastRegistered] = useState<{ username: string; fullName: string; paid: boolean } | null>(null);
 
   const { data: wallet } = useQuery<WalletData>({
     queryKey: ["/api/wallet"],
@@ -39,7 +40,7 @@ export default function RegisterMember() {
   const hasEnoughBalance = mainBalance >= REGISTRATION_FEE;
 
   const registerMutation = useMutation({
-    mutationFn: async (data: typeof form) => {
+    mutationFn: async (data: typeof form & { payFromWallet: boolean }) => {
       const res = await apiRequest("POST", "/api/user/register-member", data);
       if (!res.ok) {
         const err = await res.json();
@@ -48,39 +49,38 @@ export default function RegisterMember() {
       return res.json();
     },
     onSuccess: (data) => {
-      setLastRegistered({ username: data.user.username, fullName: data.user.fullName });
+      setLastRegistered({ username: data.user.username, fullName: data.user.fullName, paid: data.paidByWallet });
       setForm({ username: "", fullName: "", email: "", mobile: "", password: "" });
+      setPayFromWallet(false);
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/boards"] });
-      toast({
-        title: "Member Registered!",
-        description: data.message,
-      });
+      toast({ title: "Member Registered!", description: data.message });
     },
     onError: (err: Error) => {
-      toast({
-        title: "Registration Failed",
-        description: err.message,
-        variant: "destructive",
-      });
+      toast({ title: "Registration Failed", description: err.message, variant: "destructive" });
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const validate = () => {
     if (!form.username || !form.fullName || !form.email || !form.mobile || !form.password) {
       toast({ title: "All fields are required", variant: "destructive" });
-      return;
+      return false;
     }
     if (form.mobile.length !== 10 || !/^\d+$/.test(form.mobile)) {
       toast({ title: "Enter a valid 10-digit mobile number", variant: "destructive" });
-      return;
+      return false;
     }
     if (form.password.length < 6) {
       toast({ title: "Password must be at least 6 characters", variant: "destructive" });
-      return;
+      return false;
     }
-    registerMutation.mutate(form);
+    return true;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+    registerMutation.mutate({ ...form, payFromWallet });
   };
 
   const handleChange = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,36 +93,28 @@ export default function RegisterMember() {
         <div>
           <h1 className="text-2xl font-bold">Register a Member</h1>
           <p className="text-muted-foreground mt-1">
-            Register a new member under your sponsorship. The ₹5,900 EV Board entry fee will be deducted from your wallet.
+            Register a new member under your sponsorship. You can optionally pay their EV Board entry fee from your wallet.
           </p>
         </div>
 
-        {/* Wallet Balance Card */}
-        <Card className={`border-2 ${hasEnoughBalance ? "border-primary/30 bg-primary/5" : "border-destructive/30 bg-destructive/5"}`}>
+        {/* Wallet Balance */}
+        <Card className="border border-border">
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${hasEnoughBalance ? "bg-primary/10" : "bg-destructive/10"}`}>
-                  <Wallet className={`w-5 h-5 ${hasEnoughBalance ? "text-primary" : "text-destructive"}`} />
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary/10">
+                  <Wallet className="w-5 h-5 text-primary" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Your Wallet Balance</p>
-                  <p className={`text-xl font-bold ${hasEnoughBalance ? "text-primary" : "text-destructive"}`}>
-                    ₹{mainBalance.toLocaleString("en-IN")}
-                  </p>
+                  <p className="text-xl font-bold text-foreground">₹{mainBalance.toLocaleString("en-IN")}</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-sm text-muted-foreground">Registration Fee</p>
-                <p className="text-xl font-bold">₹{REGISTRATION_FEE.toLocaleString("en-IN")}</p>
+                <p className="text-sm text-muted-foreground">EV Board Fee</p>
+                <p className="text-xl font-bold text-foreground">₹{REGISTRATION_FEE.toLocaleString("en-IN")}</p>
               </div>
             </div>
-            {!hasEnoughBalance && (
-              <div className="mt-3 flex items-center gap-2 text-destructive text-sm">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>You need at least ₹{REGISTRATION_FEE.toLocaleString("en-IN")} in your wallet to register a member.</span>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -135,7 +127,10 @@ export default function RegisterMember() {
                 <div>
                   <p className="font-semibold text-green-800 dark:text-green-400">Registration Successful!</p>
                   <p className="text-sm text-green-700 dark:text-green-500">
-                    <strong>{lastRegistered.fullName}</strong> (@{lastRegistered.username}) has been registered and placed in the EV Board.
+                    <strong>{lastRegistered.fullName}</strong> (@{lastRegistered.username}){" "}
+                    {lastRegistered.paid
+                      ? "has been registered and placed in the EV Board."
+                      : "has been registered. They can log in and join the EV Board themselves."}
                   </p>
                 </div>
               </div>
@@ -230,34 +225,67 @@ export default function RegisterMember() {
 
               <Separator />
 
-              {/* Fee breakdown */}
-              <div className="rounded-lg bg-muted/50 p-4 space-y-2 text-sm">
-                <p className="font-medium text-foreground">Payment Breakdown</p>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>EV Board Entry Fee</span>
-                  <span>₹5,900</span>
+              {/* Payment Toggle */}
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="pay-toggle" className="text-sm font-medium cursor-pointer">
+                    Pay EV Board fee from my wallet
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Deduct ₹5,900 from your wallet and place the member on the EV Board immediately.
+                  </p>
                 </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Includes GST</span>
-                  <span>₹900</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between font-semibold text-foreground">
-                  <span>Deducted from your wallet</span>
-                  <span className="text-primary">₹5,900</span>
-                </div>
-                {hasEnoughBalance && (
-                  <div className="flex justify-between text-muted-foreground text-xs">
-                    <span>Balance after registration</span>
-                    <span>₹{(mainBalance - REGISTRATION_FEE).toLocaleString("en-IN")}</span>
-                  </div>
-                )}
+                <Switch
+                  id="pay-toggle"
+                  checked={payFromWallet}
+                  onCheckedChange={setPayFromWallet}
+                  data-testid="switch-pay-from-wallet"
+                />
               </div>
+
+              {/* Payment Breakdown (only when toggle is on) */}
+              {payFromWallet && (
+                <div className="rounded-lg bg-muted/50 p-4 space-y-2 text-sm">
+                  <p className="font-medium text-foreground">Payment Breakdown</p>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>EV Board Entry Fee</span>
+                    <span>₹5,900</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Includes GST</span>
+                    <span>₹900</span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between font-semibold text-foreground">
+                    <span>Deducted from your wallet</span>
+                    <span className="text-primary">₹5,900</span>
+                  </div>
+                  {hasEnoughBalance ? (
+                    <div className="flex justify-between text-muted-foreground text-xs">
+                      <span>Balance after registration</span>
+                      <span>₹{(mainBalance - REGISTRATION_FEE).toLocaleString("en-IN")}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-destructive text-xs pt-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>Insufficient balance. You need ₹{REGISTRATION_FEE.toLocaleString("en-IN")} to pay from wallet.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Info note when not paying */}
+              {!payFromWallet && (
+                <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-700 dark:text-blue-400">
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>The member account will be created but not yet placed on the EV Board. They can log in and pay the ₹5,900 entry fee themselves.</span>
+                </div>
+              )}
 
               <Button
                 type="submit"
                 className="w-full gap-2"
-                disabled={!hasEnoughBalance || registerMutation.isPending}
+                disabled={(payFromWallet && !hasEnoughBalance) || registerMutation.isPending}
                 data-testid="button-register-member"
               >
                 {registerMutation.isPending ? (
@@ -265,10 +293,15 @@ export default function RegisterMember() {
                     <span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full inline-block" />
                     Registering...
                   </>
-                ) : (
+                ) : payFromWallet ? (
                   <>
                     <IndianRupee className="w-4 h-4" />
                     Pay ₹5,900 &amp; Register Member
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    Register Member Only
                   </>
                 )}
               </Button>
