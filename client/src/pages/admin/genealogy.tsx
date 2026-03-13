@@ -18,14 +18,26 @@ import {
   Search,
   User,
   Users,
-  ChevronDown,
-  ChevronRight,
   Minus,
   Plus,
   Filter,
+  Network,
+  Share2,
 } from "lucide-react";
 import { useState, useRef, useCallback, useMemo } from "react";
 import { apiRequest } from "@/lib/queryClient";
+
+interface MatrixEntry {
+  userId: number;
+  parentId: number | null;
+  position: number | null;
+  level: number | null;
+  fullName: string;
+  username: string;
+  referralCode: string;
+  isAdmin: boolean;
+  boards: { type: string; status: string | null }[];
+}
 
 interface GenealogyUser {
   id: number;
@@ -62,6 +74,52 @@ function buildTree(users: GenealogyUser[]): TreeNode[] {
       roots.push(node);
     }
   }
+
+  return roots;
+}
+
+function buildMatrixTree(entries: MatrixEntry[]): TreeNode[] {
+  const nodeMap = new Map<number, TreeNode>();
+  const roots: TreeNode[] = [];
+
+  for (const e of entries) {
+    const user: GenealogyUser = {
+      id: e.userId,
+      username: e.username,
+      fullName: e.fullName,
+      email: "",
+      mobile: "",
+      sponsorId: e.parentId,
+      referralCode: e.referralCode,
+      isAdmin: e.isAdmin,
+      createdAt: "",
+      boards: e.boards,
+    };
+    nodeMap.set(e.userId, { user, children: [], collapsed: false });
+  }
+
+  for (const e of entries) {
+    const node = nodeMap.get(e.userId)!;
+    if (e.parentId !== null && nodeMap.has(e.parentId)) {
+      nodeMap.get(e.parentId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  // Sort children by their position in the board
+  function sortChildren(nodes: TreeNode[]) {
+    for (const n of nodes) {
+      const entry = entries.find(e => e.userId === n.user.id);
+      n.children.sort((a, b) => {
+        const aPos = entries.find(e => e.userId === a.user.id)?.position ?? 99;
+        const bPos = entries.find(e => e.userId === b.user.id)?.position ?? 99;
+        return aPos - bPos;
+      });
+      sortChildren(n.children);
+    }
+  }
+  sortChildren(roots);
 
   return roots;
 }
@@ -250,6 +308,8 @@ function TreeNodeCard({
   );
 }
 
+const BOARD_OPTIONS = ["EV", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "KING"];
+
 export default function AdminGenealogy() {
   const [scale, setScale] = useState(0.7);
   const [position, setPosition] = useState({ x: 40, y: 20 });
@@ -258,29 +318,42 @@ export default function AdminGenealogy() {
   const [searchTerm, setSearchTerm] = useState("");
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<number>>(new Set());
-  const [boardFilter, setBoardFilter] = useState<string>("ALL");
+  const [treeMode, setTreeMode] = useState<"matrix" | "sponsor">("matrix");
+  const [matrixBoard, setMatrixBoard] = useState("EV");
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const { data: users, isLoading } = useQuery<GenealogyUser[]>({
+  const { data: sponsorUsers, isLoading: sponsorLoading } = useQuery<GenealogyUser[]>({
     queryKey: ["/api/admin/genealogy"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/admin/genealogy");
       return res.json();
     },
+    enabled: treeMode === "sponsor",
   });
 
-  const filteredUsers = useMemo(() => {
-    if (!users) return [];
-    if (boardFilter === "ALL") return users;
-    return users.filter(
-      (u) => u.boards.some((b) => b.type === boardFilter)
-    );
-  }, [users, boardFilter]);
+  const { data: matrixEntries, isLoading: matrixLoading } = useQuery<MatrixEntry[]>({
+    queryKey: [`/api/admin/matrix-tree/${matrixBoard}`],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/admin/matrix-tree/${matrixBoard}`);
+      return res.json();
+    },
+    enabled: treeMode === "matrix",
+  });
+
+  const isLoading = treeMode === "matrix" ? matrixLoading : sponsorLoading;
+
+  const allUsers = treeMode === "sponsor" ? (sponsorUsers || []) : [];
 
   const tree = useMemo(() => {
-    if (!filteredUsers.length) return [];
-    const built = buildTree(filteredUsers);
+    let built: TreeNode[];
+    if (treeMode === "matrix") {
+      if (!matrixEntries?.length) return [];
+      built = buildMatrixTree(matrixEntries);
+    } else {
+      if (!allUsers.length) return [];
+      built = buildTree(allUsers);
+    }
     const applyCollapsed = (nodes: TreeNode[]) => {
       for (const n of nodes) {
         n.collapsed = collapsedNodes.has(n.user.id);
@@ -289,7 +362,7 @@ export default function AdminGenealogy() {
     };
     applyCollapsed(built);
     return built;
-  }, [filteredUsers, collapsedNodes]);
+  }, [treeMode, matrixEntries, allUsers, collapsedNodes]);
 
   const toggleNode = useCallback((id: number) => {
     setCollapsedNodes((prev) => {
@@ -304,9 +377,11 @@ export default function AdminGenealogy() {
   }, []);
 
   const collapseAll = useCallback(() => {
-    if (!users) return;
-    setCollapsedNodes(new Set(users.map((u) => u.id)));
-  }, [users]);
+    const ids = treeMode === "matrix"
+      ? (matrixEntries || []).map((e) => e.userId)
+      : (sponsorUsers || []).map((u) => u.id);
+    setCollapsedNodes(new Set(ids));
+  }, [treeMode, matrixEntries, sponsorUsers]);
 
   const expandAll = useCallback(() => {
     setCollapsedNodes(new Set());
@@ -376,29 +451,25 @@ export default function AdminGenealogy() {
     setPosition({ x: 40, y: 20 });
   }, []);
 
-  const searchResults = useMemo(() => {
-    if (!searchTerm || !users) return [];
-    return users.filter(
-      (u) =>
-        u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.referralCode.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [searchTerm, users]);
-
-  const totalUsers = filteredUsers.length;
-  const activeUsers = filteredUsers.filter((u) => u.boards.length > 0).length;
-
-  const boardCounts = useMemo(() => {
-    if (!users) return {};
-    const counts: Record<string, number> = {};
-    for (const u of users) {
-      for (const b of u.boards) {
-        counts[b.type] = (counts[b.type] || 0) + 1;
-      }
+  // Unified search across whichever data is active
+  const allNodes: { id: number; fullName: string; username: string; referralCode: string }[] = useMemo(() => {
+    if (treeMode === "matrix") {
+      return (matrixEntries || []).map(e => ({ id: e.userId, fullName: e.fullName, username: e.username, referralCode: e.referralCode }));
     }
-    return counts;
-  }, [users]);
+    return (sponsorUsers || []).map(u => ({ id: u.id, fullName: u.fullName, username: u.username, referralCode: u.referralCode }));
+  }, [treeMode, matrixEntries, sponsorUsers]);
+
+  const searchResults = useMemo(() => {
+    if (!searchTerm || !allNodes.length) return [];
+    const q = searchTerm.toLowerCase();
+    return allNodes.filter(u =>
+      u.fullName.toLowerCase().includes(q) ||
+      u.username.toLowerCase().includes(q) ||
+      u.referralCode.toLowerCase().includes(q)
+    );
+  }, [searchTerm, allNodes]);
+
+  const totalNodes = allNodes.length;
 
   if (isLoading) {
     return (
@@ -423,36 +494,53 @@ export default function AdminGenealogy() {
           <div>
             <h1 className="text-2xl font-bold">Genealogy Tree</h1>
             <p className="text-sm text-muted-foreground">
-              Sponsor-based user hierarchy{boardFilter !== "ALL" ? ` — Filtered by ${boardFilter} Board` : ""}
+              {treeMode === "matrix" ? `Matrix placement tree — ${matrixBoard} Board` : "Sponsor referral hierarchy"}
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-emerald-600">{totalUsers}</p>
-              <p className="text-xs text-muted-foreground">Total Users</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-blue-600">{activeUsers}</p>
-              <p className="text-xs text-muted-foreground">Active</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-amber-600">{totalUsers - activeUsers}</p>
-              <p className="text-xs text-muted-foreground">Inactive</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-3 text-center">
-              <p className="text-2xl font-bold text-gray-600">{Math.round(scale * 100)}%</p>
-              <p className="text-xs text-muted-foreground">Zoom</p>
-            </CardContent>
-          </Card>
+        {/* Tree mode + board selector */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex rounded-lg border overflow-hidden">
+            <button
+              onClick={() => { setTreeMode("matrix"); setCollapsedNodes(new Set()); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                treeMode === "matrix" ? "bg-emerald-500 text-white" : "bg-card text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Network className="w-3.5 h-3.5" />
+              Matrix Tree
+            </button>
+            <button
+              onClick={() => { setTreeMode("sponsor"); setCollapsedNodes(new Set()); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                treeMode === "sponsor" ? "bg-emerald-500 text-white" : "bg-card text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              Sponsor Tree
+            </button>
+          </div>
+
+          {treeMode === "matrix" && (
+            <Select value={matrixBoard} onValueChange={(v) => { setMatrixBoard(v); setCollapsedNodes(new Set()); }}>
+              <SelectTrigger className="w-[140px] h-8 text-xs">
+                <Filter className="w-3.5 h-3.5 mr-1.5" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BOARD_OPTIONS.map(b => (
+                  <SelectItem key={b} value={b}>{b} Board</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">{totalNodes}</span> members
+            &middot;
+            <span className="font-semibold text-foreground">{Math.round(scale * 100)}%</span> zoom
+          </div>
         </div>
 
         <div className="flex flex-col md:flex-row gap-3">
@@ -468,33 +556,6 @@ export default function AdminGenealogy() {
               className="pl-10"
             />
           </div>
-          <Select value={boardFilter} onValueChange={setBoardFilter}>
-            <SelectTrigger className="w-[160px]">
-              <Filter className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="Filter Board" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Boards</SelectItem>
-              <SelectItem value="EV">
-                EV {boardCounts["EV"] ? `(${boardCounts["EV"]})` : ""}
-              </SelectItem>
-              <SelectItem value="SILVER">
-                Silver {boardCounts["SILVER"] ? `(${boardCounts["SILVER"]})` : ""}
-              </SelectItem>
-              <SelectItem value="GOLD">
-                Gold {boardCounts["GOLD"] ? `(${boardCounts["GOLD"]})` : ""}
-              </SelectItem>
-              <SelectItem value="PLATINUM">
-                Platinum {boardCounts["PLATINUM"] ? `(${boardCounts["PLATINUM"]})` : ""}
-              </SelectItem>
-              <SelectItem value="DIAMOND">
-                Diamond {boardCounts["DIAMOND"] ? `(${boardCounts["DIAMOND"]})` : ""}
-              </SelectItem>
-              <SelectItem value="KING">
-                King {boardCounts["KING"] ? `(${boardCounts["KING"]})` : ""}
-              </SelectItem>
-            </SelectContent>
-          </Select>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={expandAll} className="text-xs">
               Expand All

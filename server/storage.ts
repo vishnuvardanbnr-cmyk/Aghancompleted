@@ -1,7 +1,7 @@
 
 import { users, wallets, boards, matrixPositions, transactions, withdrawals, rebirthAccounts, invoices, kycDocuments, evRewards, smtpSettings, type User, type InsertUser, type Wallet, type Board, type Transaction, type RebirthAccount, type Invoice, type KycDocument, type EvReward, type SmtpSettings } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql, count, asc, isNull, desc, or, gte, lte } from "drizzle-orm";
+import { eq, and, sql, count, asc, isNull, desc, or, gte, lte, inArray } from "drizzle-orm";
 
 // Board configuration
 export const BOARD_CONFIG: Record<string, { entry: number; gst: number; company?: number; directSponsor?: number; levelIncome: number; levels: number }> = {
@@ -2162,6 +2162,80 @@ export class DatabaseStorage implements IStorage {
       ...u,
       boards: boardsByUser.get(u.id) || [],
     }));
+  }
+
+  async getMatrixTreeData(boardType: string): Promise<any[]> {
+    // Get all child positions for this board type
+    const positions = await db
+      .select({
+        userId: matrixPositions.userId,
+        parentId: matrixPositions.parentId,
+        position: matrixPositions.position,
+        level: matrixPositions.level,
+        fullName: users.fullName,
+        username: users.username,
+        referralCode: users.referralCode,
+        isAdmin: users.isAdmin,
+      })
+      .from(matrixPositions)
+      .innerJoin(boards, eq(matrixPositions.boardId, boards.id))
+      .innerJoin(users, eq(matrixPositions.userId, users.id))
+      .where(eq(boards.type, boardType))
+      .orderBy(asc(matrixPositions.id));
+
+    const boardData = await db
+      .select({ userId: boards.userId, type: boards.type, status: boards.status })
+      .from(boards)
+      .where(eq(boards.type, boardType));
+
+    const boardsByUser = new Map<number, { type: string; status: string | null }[]>();
+    for (const b of boardData) {
+      if (!boardsByUser.has(b.userId)) boardsByUser.set(b.userId, []);
+      boardsByUser.get(b.userId)!.push({ type: b.type, status: b.status });
+    }
+
+    const childIds = new Set(positions.map(p => p.userId));
+    const result: any[] = positions.map(p => ({
+      ...p,
+      boards: boardsByUser.get(p.userId) || [],
+    }));
+
+    // Find root users (referenced as parentId but not themselves a child)
+    const rootIds = new Set<number>();
+    for (const p of positions) {
+      if (p.parentId !== null && !childIds.has(p.parentId)) {
+        rootIds.add(p.parentId);
+      }
+    }
+
+    if (rootIds.size > 0) {
+      const rootUsers = await db
+        .select({
+          id: users.id,
+          fullName: users.fullName,
+          username: users.username,
+          referralCode: users.referralCode,
+          isAdmin: users.isAdmin,
+        })
+        .from(users)
+        .where(inArray(users.id, [...rootIds]));
+
+      for (const ru of rootUsers) {
+        result.unshift({
+          userId: ru.id,
+          parentId: null,
+          position: null,
+          level: 0,
+          fullName: ru.fullName,
+          username: ru.username,
+          referralCode: ru.referralCode,
+          isAdmin: ru.isAdmin,
+          boards: boardsByUser.get(ru.id) || [],
+        });
+      }
+    }
+
+    return result;
   }
 
   // =========== SMTP SETTINGS METHODS ===========

@@ -905,6 +905,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/matrix-tree/:boardType", requireAdmin, async (req, res) => {
+    try {
+      const { boardType } = req.params;
+      const data = await (storage as any).getMatrixTreeData(boardType.toUpperCase());
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch matrix tree data" });
+    }
+  });
+
   // Admin: Get SMTP settings
   app.get("/api/admin/smtp", requireAdmin, async (req, res) => {
     try {
