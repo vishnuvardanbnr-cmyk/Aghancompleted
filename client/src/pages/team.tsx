@@ -36,7 +36,7 @@ interface UserBoard {
 }
 
 interface MatrixChild {
-  userId: number;
+  id: number;
   username: string;
   fullName: string;
   position: number;
@@ -192,10 +192,10 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
   };
 
   const handleMemberClick = (child: MatrixChild) => {
-    if (child.userId === currentNode.userId) return;
-    setBreadcrumb(prev => [...prev, { userId: child.userId, name: child.fullName }]);
-    // Directly fetch with the child's userId — no relay through state
-    loadChildren(selectedBoard, child.userId);
+    if (child.id === currentNode.userId) return;
+    setBreadcrumb(prev => [...prev, { userId: child.id, name: child.fullName }]);
+    // Directly fetch with the child's id — no relay through state
+    loadChildren(selectedBoard, child.id);
   };
 
   const handleBreadcrumbClick = (index: number) => {
@@ -274,9 +274,9 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
                 const initials = child.fullName.split(" ").map(n => n[0]).join("").toUpperCase();
                 return (
                   <div
-                    key={child.userId}
+                    key={child.id}
                     onClick={() => handleMemberClick(child)}
-                    data-testid={`genealogy-member-${child.userId}`}
+                    data-testid={`genealogy-member-${child.id}`}
                     className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm hover:border-primary/30 active:scale-[0.99] ${selectedConfig?.bgLight || "bg-muted/20"}`}
                   >
                     <div className={`flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold shrink-0 ${selectedConfig?.color || "bg-primary"}`}>
