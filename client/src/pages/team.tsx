@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, UserPlus, Copy, Share2, CheckCircle, Zap, Award, Star, Gem, Diamond, Crown, Mail, Phone, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Link, GitBranch, ChevronRightIcon, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -159,31 +159,46 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
 
   const currentNode = breadcrumb[breadcrumb.length - 1];
 
-  // Build the full URL so the default fetcher uses it as-is, keyed by exact URL
-  const matrixUrl = selectedBoard
-    ? currentNode.userId !== currentUserId
-      ? `/api/matrix/${selectedBoard}?memberId=${currentNode.userId}`
-      : `/api/matrix/${selectedBoard}`
-    : null;
+  const [children, setChildren] = useState<MatrixChild[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { data: children, isLoading } = useQuery<MatrixChild[]>({
-    queryKey: [matrixUrl],
-    enabled: !!matrixUrl,
-  });
+  const fetchChildren = useCallback(async (board: string, userId: number) => {
+    if (!board) return;
+    setIsLoading(true);
+    try {
+      const url = userId !== currentUserId
+        ? `/api/matrix/${board}?memberId=${userId}`
+        : `/api/matrix/${board}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setChildren(data);
+    } catch {
+      setChildren([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    fetchChildren(selectedBoard, currentNode.userId);
+  }, [selectedBoard, currentNode.userId, fetchChildren]);
 
   const handleBoardSelect = (boardType: string) => {
+    setChildren([]);
     setSelectedBoard(boardType);
     setBreadcrumb([{ userId: currentUserId, name: "Me" }]);
   };
 
   const handleMemberClick = (child: MatrixChild) => {
-    // Prevent adding same node again (already the current view)
     if (child.userId === currentNode.userId) return;
+    setChildren([]);
     setBreadcrumb(prev => [...prev, { userId: child.userId, name: child.fullName }]);
   };
 
   const handleBreadcrumbClick = (index: number) => {
     if (index === breadcrumb.length - 1) return;
+    setChildren([]);
     setBreadcrumb(prev => prev.slice(0, index + 1));
   };
 
