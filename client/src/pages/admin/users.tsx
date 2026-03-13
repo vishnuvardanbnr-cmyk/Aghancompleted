@@ -22,7 +22,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Eye, Wallet, ArrowLeft, ArrowRight, Pencil, Key, EyeOff } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { Search, Eye, Wallet, ArrowLeft, ArrowRight, Pencil, Key, EyeOff, LogIn } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface User {
@@ -83,6 +84,7 @@ export default function AdminUsers() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { impersonate } = useAuth();
 
   const { data: usersData, isLoading } = useQuery<{ users: User[]; total: number }>({
     queryKey: ["/api/admin/users", page, search],
@@ -298,6 +300,16 @@ export default function AdminUsers() {
                               title="View/Reset Password"
                             >
                               <Key className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950"
+                              onClick={() => impersonate(user.id)}
+                              title="Login as this user"
+                              data-testid={`button-impersonate-${user.id}`}
+                            >
+                              <LogIn className="w-4 h-4" />
                             </Button>
                           </div>
                         </TableCell>

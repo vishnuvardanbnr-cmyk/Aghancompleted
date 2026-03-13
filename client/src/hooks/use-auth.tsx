@@ -11,6 +11,7 @@ interface User {
   mobile: string;
   referralCode: string;
   isAdmin: boolean;
+  isImpersonating?: boolean;
 }
 
 interface AuthContextType {
@@ -19,6 +20,8 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
+  impersonate: (userId: number) => Promise<void>;
+  exitImpersonation: () => Promise<void>;
 }
 
 interface RegisterData {
@@ -72,6 +75,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const impersonateMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      const res = await apiRequest("POST", `/api/admin/impersonate/${userId}`, {});
+      return res.json();
+    },
+    onSuccess: (userData) => {
+      queryClient.setQueryData(["/api/user"], userData);
+      queryClient.clear();
+      queryClient.setQueryData(["/api/user"], userData);
+      setLocation("/dashboard");
+    },
+  });
+
+  const exitImpersonationMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/exit-impersonation", {});
+      return res.json();
+    },
+    onSuccess: (userData) => {
+      queryClient.setQueryData(["/api/user"], userData);
+      queryClient.clear();
+      queryClient.setQueryData(["/api/user"], userData);
+      setLocation("/admin/users");
+    },
+  });
+
   const login = async (username: string, password: string) => {
     await loginMutation.mutateAsync({ username, password });
   };
@@ -84,8 +113,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await logoutMutation.mutateAsync();
   };
 
+  const impersonate = async (userId: number) => {
+    await impersonateMutation.mutateAsync(userId);
+  };
+
+  const exitImpersonation = async () => {
+    await exitImpersonationMutation.mutateAsync();
+  };
+
   return (
-    <AuthContext.Provider value={{ user: user ?? null, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user: user ?? null, isLoading, login, register, logout, impersonate, exitImpersonation }}>
       {children}
     </AuthContext.Provider>
   );

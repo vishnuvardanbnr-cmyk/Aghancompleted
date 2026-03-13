@@ -131,6 +131,54 @@ export function setupAuth(app: Express) {
 
   app.get("/api/user", (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    res.json(req.user);
+    const isImpersonating = !!(req.session as any).originalAdminId;
+    res.json({ ...(req.user as any), isImpersonating });
+  });
+
+  // Admin impersonation: log in as another user without their password
+  app.post("/api/admin/impersonate/:userId", async (req, res, next) => {
+    if (!req.isAuthenticated() || !(req.user as any).isAdmin) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    if ((req.session as any).originalAdminId) {
+      return res.status(400).json({ message: "Already impersonating a user. Exit first." });
+    }
+    try {
+      const targetId = parseInt(req.params.userId);
+      const targetUser = await storage.getUser(targetId);
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+      if (targetUser.isAdmin) return res.status(400).json({ message: "Cannot impersonate an admin account" });
+
+      const adminId = (req.user as any).id;
+      (req.session as any).originalAdminId = adminId;
+
+      req.login(targetUser, (err) => {
+        if (err) return next(err);
+        res.json({ ...(targetUser as any), isImpersonating: true });
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Exit impersonation: restore original admin session
+  app.post("/api/admin/exit-impersonation", async (req, res, next) => {
+    const originalAdminId = (req.session as any).originalAdminId;
+    if (!originalAdminId) {
+      return res.status(400).json({ message: "Not currently impersonating any user" });
+    }
+    try {
+      const adminUser = await storage.getUser(originalAdminId);
+      if (!adminUser) return res.status(404).json({ message: "Original admin not found" });
+
+      delete (req.session as any).originalAdminId;
+
+      req.login(adminUser, (err) => {
+        if (err) return next(err);
+        res.json({ ...(adminUser as any), isImpersonating: false });
+      });
+    } catch (err) {
+      next(err);
+    }
   });
 }

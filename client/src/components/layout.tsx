@@ -24,6 +24,8 @@ import {
   Mail,
   GitBranch,
   IndianRupee,
+  UserCheck,
+  ArrowLeftCircle,
 } from "lucide-react";
 
 const navItems = [
@@ -170,6 +172,32 @@ function MobileFooter() {
   );
 }
 
+function ImpersonationBanner() {
+  const { user, exitImpersonation } = useAuth();
+  if (!user?.isImpersonating) return null;
+
+  return (
+    <div className="sticky top-0 z-[60] flex items-center justify-between gap-3 bg-amber-500 dark:bg-amber-600 px-4 py-2 text-white shadow-md">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <UserCheck className="w-4 h-4 shrink-0" />
+        <span>
+          Viewing as <strong>{user.fullName}</strong> (@{user.username})
+        </span>
+      </div>
+      <Button
+        size="sm"
+        variant="secondary"
+        className="h-7 gap-1.5 bg-white/20 hover:bg-white/30 text-white border-white/30 text-xs font-semibold"
+        onClick={exitImpersonation}
+        data-testid="button-exit-user-view"
+      >
+        <ArrowLeftCircle className="w-3.5 h-3.5" />
+        Exit User View
+      </Button>
+    </div>
+  );
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const { theme, toggleTheme } = useTheme();
@@ -184,6 +212,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <Sidebar />
       </div>
       <div className="flex-1 flex flex-col min-w-0">
+        <ImpersonationBanner />
         <header className="sticky top-0 z-50 h-12 border-b border-border bg-background/80 backdrop-blur-sm px-4 flex items-center justify-between">
           <div className="flex items-center gap-2 md:hidden">
             <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
