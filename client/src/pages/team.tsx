@@ -159,17 +159,18 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
 
   const currentNode = breadcrumb[breadcrumb.length - 1];
 
+  // queryFn reads params from queryKey so TanStack Query always sees fresh data
   const { data: children, isLoading } = useQuery<MatrixChild[]>({
-    queryKey: ["/api/matrix", selectedBoard, currentNode.userId],
-    queryFn: async () => {
-      const params = currentNode.userId !== currentUserId
-        ? `?memberId=${currentNode.userId}`
-        : "";
-      const res = await fetch(`/api/matrix/${selectedBoard}${params}`);
+    queryKey: ["/api/matrix", selectedBoard, currentNode.userId] as const,
+    queryFn: async ({ queryKey }) => {
+      const [, board, userId] = queryKey;
+      const params = (userId as number) !== currentUserId ? `?memberId=${userId}` : "";
+      const res = await fetch(`/api/matrix/${board}${params}`);
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
     enabled: !!selectedBoard,
+    staleTime: 0,
   });
 
   const handleBoardSelect = (boardType: string) => {
@@ -178,10 +179,13 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
   };
 
   const handleMemberClick = (child: MatrixChild) => {
+    // Prevent adding same node again (already the current view)
+    if (child.userId === currentNode.userId) return;
     setBreadcrumb(prev => [...prev, { userId: child.userId, name: child.fullName }]);
   };
 
   const handleBreadcrumbClick = (index: number) => {
+    if (index === breadcrumb.length - 1) return;
     setBreadcrumb(prev => prev.slice(0, index + 1));
   };
 
@@ -250,14 +254,14 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
             </div>
           ) : children && children.length > 0 ? (
             <div className="space-y-2">
-              {children.map((child, idx) => {
+              {children.map((child) => {
                 const initials = child.fullName.split(" ").map(n => n[0]).join("").toUpperCase();
                 return (
                   <div
                     key={child.userId}
                     onClick={() => handleMemberClick(child)}
                     data-testid={`genealogy-member-${child.userId}`}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm hover:border-primary/30 ${selectedConfig?.bgLight || "bg-muted/20"}`}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm hover:border-primary/30 active:scale-[0.99] ${selectedConfig?.bgLight || "bg-muted/20"}`}
                   >
                     <div className={`flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold shrink-0 ${selectedConfig?.color || "bg-primary"}`}>
                       {initials.slice(0, 2)}
@@ -277,9 +281,19 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
               })}
             </div>
           ) : (
-            <div className="text-center py-6 rounded-lg border border-dashed">
-              <Users className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            <div className="text-center py-6 rounded-lg border border-dashed space-y-3">
+              <Users className="w-8 h-8 mx-auto text-muted-foreground" />
               <p className="text-sm text-muted-foreground">No members under this position yet</p>
+              {breadcrumb.length > 1 && (
+                <button
+                  onClick={() => handleBreadcrumbClick(breadcrumb.length - 2)}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  data-testid="button-genealogy-back"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  Go back
+                </button>
+              )}
             </div>
           )}
         </>
