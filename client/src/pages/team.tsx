@@ -265,34 +265,34 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
           </div>
 
           {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-14" />)}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
             </div>
           ) : children && children.length > 0 ? (
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {children.map((child) => {
                 const initials = child.fullName.split(" ").map(n => n[0]).join("").toUpperCase();
                 return (
-                  <div
+                  <button
                     key={child.id}
                     onClick={() => handleMemberClick(child)}
                     data-testid={`genealogy-member-${child.id}`}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm hover:border-primary/30 active:scale-[0.99] ${selectedConfig?.bgLight || "bg-muted/20"}`}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all duration-150
+                      hover:shadow-md hover:-translate-y-0.5 active:scale-95 active:shadow-none
+                      ${selectedConfig?.borderColor || "border-primary/20"} ${selectedConfig?.bgLight || "bg-muted/20"}
+                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50`}
                   >
-                    <div className={`flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold shrink-0 ${selectedConfig?.color || "bg-primary"}`}>
+                    <div className={`flex items-center justify-center w-11 h-11 rounded-full text-white text-sm font-bold shadow-sm ${selectedConfig?.color || "bg-primary"}`}>
                       {initials.slice(0, 2)}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate">{child.fullName}</p>
-                      <p className="text-xs text-muted-foreground truncate">@{child.username}</p>
+                    <div className="text-center w-full">
+                      <p className="text-xs font-semibold truncate leading-tight">{child.fullName}</p>
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">@{child.username}</p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Badge variant="outline" className="text-[10px] font-mono hidden sm:inline-flex">
-                        Pos {child.position}
-                      </Badge>
-                      <ChevronRightIcon className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                  </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${selectedConfig?.bgLight || "bg-muted"} ${selectedConfig?.textColor || "text-primary"} border ${selectedConfig?.borderColor || "border-primary/20"}`}>
+                      Pos {child.position}
+                    </span>
+                  </button>
                 );
               })}
             </div>
