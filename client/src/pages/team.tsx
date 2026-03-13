@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, UserPlus, Copy, Share2, CheckCircle, Zap, Award, Star, Gem, Diamond, Crown, Mail, Phone, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Link } from "lucide-react";
+import { Users, UserPlus, Copy, Share2, CheckCircle, Zap, Award, Star, Gem, Diamond, Crown, Mail, Phone, Calendar, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Link, GitBranch, ChevronRightIcon, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -28,22 +28,39 @@ interface TeamMember {
   boards: BoardInfo[];
 }
 
+interface UserBoard {
+  id: number;
+  userId: number;
+  type: string;
+  status: string;
+}
+
+interface MatrixChild {
+  userId: number;
+  username: string;
+  fullName: string;
+  position: number;
+  level: number;
+}
+
+const BOARD_SEQUENCE = ["EV", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "KING"];
+
 const boardConfig = [
-  { type: "EV", icon: Zap, color: "bg-emerald-500" },
-  { type: "SILVER", icon: Award, color: "bg-gray-400" },
-  { type: "GOLD", icon: Star, color: "bg-yellow-500" },
-  { type: "PLATINUM", icon: Gem, color: "bg-blue-400" },
-  { type: "DIAMOND", icon: Diamond, color: "bg-purple-400" },
-  { type: "KING", icon: Crown, color: "bg-orange-500" },
+  { type: "EV", icon: Zap, color: "bg-emerald-500", textColor: "text-emerald-600", borderColor: "border-emerald-200", bgLight: "bg-emerald-50" },
+  { type: "SILVER", icon: Award, color: "bg-gray-400", textColor: "text-gray-600", borderColor: "border-gray-200", bgLight: "bg-gray-50" },
+  { type: "GOLD", icon: Star, color: "bg-yellow-500", textColor: "text-yellow-600", borderColor: "border-yellow-200", bgLight: "bg-yellow-50" },
+  { type: "PLATINUM", icon: Gem, color: "bg-blue-400", textColor: "text-blue-600", borderColor: "border-blue-200", bgLight: "bg-blue-50" },
+  { type: "DIAMOND", icon: Diamond, color: "bg-purple-400", textColor: "text-purple-600", borderColor: "border-purple-200", bgLight: "bg-purple-50" },
+  { type: "KING", icon: Crown, color: "bg-orange-500", textColor: "text-orange-600", borderColor: "border-orange-200", bgLight: "bg-orange-50" },
 ];
 
 function BoardBadge({ type, status }: { type: string; status: string }) {
   const config = boardConfig.find(b => b.type === type);
   const Icon = config?.icon || Zap;
   const colorClass = config?.color || "bg-primary";
-  
+
   return (
-    <div 
+    <div
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs text-white ${colorClass} ${status === "COMPLETED" ? "opacity-60" : ""}`}
       title={`${type} Board - ${status}`}
     >
@@ -57,8 +74,8 @@ function MemberDetailCard({ member }: { member: TeamMember }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Card 
-      className="cursor-pointer" 
+    <Card
+      className="cursor-pointer"
       data-testid={`member-card-${member.id}`}
       onClick={() => setExpanded(!expanded)}
     >
@@ -86,7 +103,7 @@ function MemberDetailCard({ member }: { member: TeamMember }) {
             </div>
           </div>
         </div>
-        
+
         {expanded && (
           <div className="mt-3 pt-3 border-t space-y-2">
             <div className="sm:hidden">
@@ -121,6 +138,156 @@ function MemberDetailCard({ member }: { member: TeamMember }) {
   );
 }
 
+interface BreadcrumbEntry {
+  userId: number;
+  name: string;
+}
+
+function GenealogyView({ userBoards, currentUserId, currentUserName }: {
+  userBoards: UserBoard[];
+  currentUserId: number;
+  currentUserName: string;
+}) {
+  const availableBoards = BOARD_SEQUENCE.filter(type =>
+    userBoards.some(b => b.type === type)
+  );
+
+  const [selectedBoard, setSelectedBoard] = useState<string>(availableBoards[0] || "");
+  const [breadcrumb, setBreadcrumb] = useState<BreadcrumbEntry[]>([
+    { userId: currentUserId, name: "Me" }
+  ]);
+
+  const currentNode = breadcrumb[breadcrumb.length - 1];
+
+  const { data: children, isLoading } = useQuery<MatrixChild[]>({
+    queryKey: ["/api/matrix", selectedBoard, currentNode.userId],
+    queryFn: async () => {
+      const params = currentNode.userId !== currentUserId
+        ? `?memberId=${currentNode.userId}`
+        : "";
+      const res = await fetch(`/api/matrix/${selectedBoard}${params}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: !!selectedBoard,
+  });
+
+  const handleBoardSelect = (boardType: string) => {
+    setSelectedBoard(boardType);
+    setBreadcrumb([{ userId: currentUserId, name: "Me" }]);
+  };
+
+  const handleMemberClick = (child: MatrixChild) => {
+    setBreadcrumb(prev => [...prev, { userId: child.userId, name: child.fullName }]);
+  };
+
+  const handleBreadcrumbClick = (index: number) => {
+    setBreadcrumb(prev => prev.slice(0, index + 1));
+  };
+
+  const selectedConfig = boardConfig.find(b => b.type === selectedBoard);
+
+  if (availableBoards.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <GitBranch className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+        <p className="text-sm text-muted-foreground">You haven't joined any board yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {availableBoards.map(boardType => {
+          const cfg = boardConfig.find(b => b.type === boardType);
+          const Icon = cfg?.icon || Zap;
+          const isSelected = selectedBoard === boardType;
+          return (
+            <button
+              key={boardType}
+              onClick={() => handleBoardSelect(boardType)}
+              data-testid={`button-board-select-${boardType}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                isSelected
+                  ? `${cfg?.color} text-white border-transparent shadow`
+                  : `bg-background border-border text-muted-foreground hover:border-primary/40`
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {boardType}
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedBoard && (
+        <>
+          <div className="flex items-center gap-1 flex-wrap text-sm">
+            {breadcrumb.map((entry, index) => (
+              <span key={index} className="flex items-center gap-1">
+                {index > 0 && <ChevronRightIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                <button
+                  onClick={() => handleBreadcrumbClick(index)}
+                  disabled={index === breadcrumb.length - 1}
+                  data-testid={`breadcrumb-${index}`}
+                  className={`flex items-center gap-1 rounded px-1 py-0.5 transition-colors ${
+                    index === breadcrumb.length - 1
+                      ? `font-semibold ${selectedConfig?.textColor}`
+                      : "text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
+                  }`}
+                >
+                  {index === 0 && <Home className="w-3 h-3" />}
+                  <span className="text-xs">{entry.name}</span>
+                </button>
+              </span>
+            ))}
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-14" />)}
+            </div>
+          ) : children && children.length > 0 ? (
+            <div className="space-y-2">
+              {children.map((child, idx) => {
+                const initials = child.fullName.split(" ").map(n => n[0]).join("").toUpperCase();
+                return (
+                  <div
+                    key={child.userId}
+                    onClick={() => handleMemberClick(child)}
+                    data-testid={`genealogy-member-${child.userId}`}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm hover:border-primary/30 ${selectedConfig?.bgLight || "bg-muted/20"}`}
+                  >
+                    <div className={`flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold shrink-0 ${selectedConfig?.color || "bg-primary"}`}>
+                      {initials.slice(0, 2)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{child.fullName}</p>
+                      <p className="text-xs text-muted-foreground truncate">@{child.username}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="outline" className="text-[10px] font-mono hidden sm:inline-flex">
+                        Pos {child.position}
+                      </Badge>
+                      <ChevronRightIcon className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-6 rounded-lg border border-dashed">
+              <Users className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">No members under this position yet</p>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 const ITEMS_PER_PAGE = 5;
 
 export default function Team() {
@@ -132,6 +299,10 @@ export default function Team() {
 
   const { data: team, isLoading } = useQuery<TeamMember[]>({
     queryKey: ["/api/team"],
+  });
+
+  const { data: userBoards } = useQuery<UserBoard[]>({
+    queryKey: ["/api/user/boards"],
   });
 
   const referralCode = user?.referralCode ? `AP${user.referralCode}` : "";
@@ -254,6 +425,25 @@ export default function Team() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <GitBranch className="w-4 h-4 text-primary" />
+              Genealogy View
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Browse your matrix tree by board. Click a member to see their downline.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-3 sm:px-4 pb-4">
+            <GenealogyView
+              userBoards={userBoards || []}
+              currentUserId={user?.id || 0}
+              currentUserName={user?.fullName || "Me"}
+            />
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader className="py-3 px-4">
