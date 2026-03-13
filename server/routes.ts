@@ -400,6 +400,88 @@ export async function registerRoutes(
      res.json(board);
   });
 
+  // =========== REGISTER MEMBER (Wallet Transfer) ===========
+
+  app.post("/api/user/register-member", async (req, res, next) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const sponsorId = (req.user as any).id;
+
+    try {
+      const { username, fullName, email, mobile, password } = req.body;
+
+      if (!username || !fullName || !email || !mobile || !password) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      // Check duplicate username/email
+      const existing = await storage.getUserByUsername(username);
+      if (existing) return res.status(400).json({ message: "Username already taken" });
+
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) return res.status(400).json({ message: "Email already registered" });
+
+      // Verify sponsor wallet balance
+      const sponsorWallet = await storage.getWallet(sponsorId);
+      const REGISTRATION_FEE = 5900;
+      if (!sponsorWallet || Number(sponsorWallet.mainBalance) < REGISTRATION_FEE) {
+        return res.status(400).json({ message: `Insufficient wallet balance. You need ₹${REGISTRATION_FEE.toLocaleString()} to register a member.` });
+      }
+
+      // Hash the password
+      const { hashPassword } = await import("./auth");
+      const hashedPassword = await hashPassword(password);
+
+      // Create the new user with current user as sponsor
+      const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const newUser = await storage.createUser({
+        username,
+        fullName,
+        email,
+        mobile,
+        password: hashedPassword,
+        sponsorId,
+        referralCode,
+        isAdmin: false,
+      });
+
+      // Create wallet for new user — then reset to 0 (overrides test default)
+      await storage.createWallet(newUser.id);
+      await storage.updateWallet(newUser.id, { mainBalance: "0" });
+
+      // Deduct registration fee from sponsor's wallet
+      await storage.updateWallet(sponsorId, {
+        mainBalance: (Number(sponsorWallet.mainBalance) - REGISTRATION_FEE).toString(),
+      });
+      await storage.createTransaction({
+        userId: sponsorId,
+        amount: REGISTRATION_FEE.toString(),
+        type: "BOARD_ENTRY",
+        description: `Registration fee paid for member @${username}`,
+        status: "COMPLETED",
+      });
+
+      // Credit the fee to the new user's wallet
+      await storage.updateWallet(newUser.id, { mainBalance: REGISTRATION_FEE.toString() });
+      await storage.createTransaction({
+        userId: newUser.id,
+        amount: REGISTRATION_FEE.toString(),
+        type: "DEPOSIT",
+        description: `Registration funded by sponsor @${(req.user as any).username}`,
+        status: "COMPLETED",
+      });
+
+      // Join the EV board — this deducts fee from new user's wallet and distributes income
+      const joinResult = await storage.joinBoard(newUser.id, "EV");
+      if (!joinResult.success) {
+        return res.status(400).json({ message: joinResult.message });
+      }
+
+      res.status(201).json({ success: true, message: `Member @${username} registered and placed in EV Board successfully.`, user: { id: newUser.id, username: newUser.username, fullName: newUser.fullName } });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // =========== USER INVOICE ROUTES ===========
 
   app.get("/api/invoices", async (req, res) => {

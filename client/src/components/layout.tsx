@@ -34,6 +34,7 @@ const navItems = [
   { path: "/wallet", label: "Wallet", icon: Wallet },
   { path: "/income-details", label: "Income Details", icon: IndianRupee },
   { path: "/team", label: "Team", icon: Users },
+  { path: "/register-member", label: "Register", icon: UserCheck },
   { path: "/profile", label: "Profile", icon: User },
 ];
 
@@ -145,7 +146,7 @@ function Sidebar() {
 function MobileFooter() {
   const [location] = useLocation();
   const { user } = useAuth();
-  const mobileItems = navItems.filter(item => item.path !== "/income-details");
+  const mobileItems = navItems.filter(item => item.path !== "/income-details" && item.path !== "/register-member");
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border md:hidden">

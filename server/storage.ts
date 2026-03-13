@@ -26,6 +26,7 @@ export interface IStorage {
   // User
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUserByReferralCode(code: string): Promise<User | undefined>;
   getReferrals(userId: number): Promise<User[]>;
