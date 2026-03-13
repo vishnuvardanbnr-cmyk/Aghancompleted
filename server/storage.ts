@@ -51,6 +51,7 @@ export interface IStorage {
   getMatrixChildren(parentId: number, boardType: string): Promise<any[]>;
   findPlacementParent(sponsorId: number, boardType: string): Promise<number>;
   findJunglePlacementParent(boardType: string): Promise<number | null>;
+  findFCFSPlacementParent(boardType: string): Promise<number | null>;
   addToMatrix(boardId: number, userId: number, parentId: number | null, position: number, level: number): Promise<void>;
   getUplineChain(userId: number, boardType: string, maxLevels: number): Promise<number[]>;
   
@@ -490,6 +491,74 @@ export class DatabaseStorage implements IStorage {
     return roots[0] || null;
   }
 
+  async findFCFSPlacementParent(boardType: string): Promise<number | null> {
+    // Strict FCFS: Fill the first available parent completely (all 6 slots)
+    // before moving to the next parent in BFS order.
+    // Pattern: A gets 1,2,3,4,5,6 → then B gets 1,2,3,4,5,6 → etc.
+
+    const allPositions = await db
+      .select({
+        id: matrixPositions.id,
+        userId: matrixPositions.userId,
+        parentId: matrixPositions.parentId,
+        position: matrixPositions.position
+      })
+      .from(matrixPositions)
+      .innerJoin(boards, eq(matrixPositions.boardId, boards.id))
+      .where(eq(boards.type, boardType as any))
+      .orderBy(asc(matrixPositions.id));
+
+    if (allPositions.length === 0) {
+      return null;
+    }
+
+    // Build children count map
+    const childrenCount = new Map<number, number>();
+    for (const pos of allPositions) {
+      childrenCount.set(pos.userId, 0);
+    }
+    for (const pos of allPositions) {
+      if (pos.parentId !== null) {
+        childrenCount.set(pos.parentId, (childrenCount.get(pos.parentId) || 0) + 1);
+      }
+    }
+
+    // Find root users ordered by insertion
+    const roots: number[] = [];
+    for (const pos of allPositions) {
+      if (pos.parentId === null) {
+        roots.push(pos.userId);
+      }
+    }
+
+    // BFS: at each level return the FIRST person (by join order) with < 6 children
+    // Only move to the next level when all at current level are full
+    let currentLevel: number[] = [...roots];
+
+    while (currentLevel.length > 0) {
+      for (const parentId of currentLevel) {
+        const count = childrenCount.get(parentId) || 0;
+        if (count < 6) {
+          return parentId;
+        }
+      }
+
+      // All at this level are full - build next level in BFS order
+      const nextLevel: number[] = [];
+      for (const parentId of currentLevel) {
+        const children = allPositions
+          .filter(p => p.parentId === parentId)
+          .sort((a, b) => (a.position || 0) - (b.position || 0));
+        for (const child of children) {
+          nextLevel.push(child.userId);
+        }
+      }
+      currentLevel = nextLevel;
+    }
+
+    return roots[0] || null;
+  }
+
   async addToMatrix(boardId: number, userId: number, parentId: number | null, position: number, level: number): Promise<void> {
     await db.insert(matrixPositions).values({
       boardId,
@@ -576,9 +645,14 @@ export class DatabaseStorage implements IStorage {
     const board = await this.createBoard(userId, boardType);
 
     // Find placement parent
-    // All boards use global FCFS - place under earliest person with open slots
+    // EV Board: strict FCFS (fill first parent fully before moving to next)
+    // All other boards: jungle round-robin (spread one per member at each level)
     let placementParentId: number | null = null;
-    placementParentId = await this.findJunglePlacementParent(boardType);
+    if (boardType === "EV") {
+      placementParentId = await this.findFCFSPlacementParent(boardType);
+    } else {
+      placementParentId = await this.findJunglePlacementParent(boardType);
+    }
 
     // Get position under parent
     const siblingCount = placementParentId ? await this.getMatrixChildrenCount(placementParentId, boardType) : 0;
