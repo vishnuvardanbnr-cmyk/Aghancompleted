@@ -243,25 +243,28 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
 
       {selectedBoard && (
         <>
-          <div className="flex items-center gap-1 flex-wrap text-sm">
-            {breadcrumb.map((entry, index) => (
-              <span key={index} className="flex items-center gap-1">
-                {index > 0 && <ChevronRightIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-                <button
-                  onClick={() => handleBreadcrumbClick(index)}
-                  disabled={index === breadcrumb.length - 1}
-                  data-testid={`breadcrumb-${index}`}
-                  className={`flex items-center gap-1 rounded px-1 py-0.5 transition-colors ${
-                    index === breadcrumb.length - 1
-                      ? `font-semibold ${selectedConfig?.textColor}`
-                      : "text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
-                  }`}
-                >
-                  {index === 0 && <Home className="w-3 h-3" />}
-                  <span className="text-xs">{entry.name}</span>
-                </button>
-              </span>
-            ))}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {breadcrumb.map((entry, index) => {
+              const isLast = index === breadcrumb.length - 1;
+              return (
+                <span key={index} className="flex items-center gap-1.5">
+                  {index > 0 && <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />}
+                  <button
+                    onClick={() => handleBreadcrumbClick(index)}
+                    disabled={isLast}
+                    data-testid={`breadcrumb-${index}`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-150 ${
+                      isLast
+                        ? `${selectedConfig?.color || "bg-primary"} text-white border-transparent shadow-sm cursor-default`
+                        : "bg-muted/60 text-muted-foreground border-border hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
+                    }`}
+                  >
+                    {index === 0 && <Home className="w-3 h-3 shrink-0" />}
+                    {entry.name}
+                  </button>
+                </span>
+              );
+            })}
           </div>
 
           {isLoading ? (
