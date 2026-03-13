@@ -159,18 +159,16 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
 
   const currentNode = breadcrumb[breadcrumb.length - 1];
 
-  // queryFn reads params from queryKey so TanStack Query always sees fresh data
+  // Build the full URL so the default fetcher uses it as-is, keyed by exact URL
+  const matrixUrl = selectedBoard
+    ? currentNode.userId !== currentUserId
+      ? `/api/matrix/${selectedBoard}?memberId=${currentNode.userId}`
+      : `/api/matrix/${selectedBoard}`
+    : null;
+
   const { data: children, isLoading } = useQuery<MatrixChild[]>({
-    queryKey: ["/api/matrix", selectedBoard, currentNode.userId] as const,
-    queryFn: async ({ queryKey }) => {
-      const [, board, userId] = queryKey;
-      const params = (userId as number) !== currentUserId ? `?memberId=${userId}` : "";
-      const res = await fetch(`/api/matrix/${board}${params}`);
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
-    },
-    enabled: !!selectedBoard,
-    staleTime: 0,
+    queryKey: [matrixUrl],
+    enabled: !!matrixUrl,
   });
 
   const handleBoardSelect = (boardType: string) => {
