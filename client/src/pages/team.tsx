@@ -268,11 +268,11 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
           </div>
 
           {isLoading ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-14 rounded-lg" />)}
             </div>
           ) : children && children.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="space-y-2">
               {children.map((child) => {
                 const initials = child.fullName.split(" ").map(n => n[0]).join("").toUpperCase();
                 return (
@@ -280,21 +280,24 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
                     key={child.id}
                     onClick={() => handleMemberClick(child)}
                     data-testid={`genealogy-member-${child.id}`}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all duration-150
-                      hover:shadow-md hover:-translate-y-0.5 active:scale-95 active:shadow-none
-                      ${selectedConfig?.borderColor || "border-primary/20"} ${selectedConfig?.bgLight || "bg-muted/20"}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left cursor-pointer transition-all duration-150
+                      hover:shadow-sm hover:border-primary/30 active:scale-[0.99]
+                      ${selectedConfig?.bgLight || "bg-muted/20"} ${selectedConfig?.borderColor || "border-border"}
                       focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50`}
                   >
-                    <div className={`flex items-center justify-center w-11 h-11 rounded-full text-white text-sm font-bold shadow-sm ${selectedConfig?.color || "bg-primary"}`}>
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-white text-xs font-bold shrink-0 ${selectedConfig?.color || "bg-primary"}`}>
                       {initials.slice(0, 2)}
                     </div>
-                    <div className="text-center w-full">
-                      <p className="text-xs font-semibold truncate leading-tight">{child.fullName}</p>
-                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">@{child.username}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{child.fullName}</p>
+                      <p className="text-xs text-muted-foreground truncate">@{child.username}</p>
                     </div>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${selectedConfig?.bgLight || "bg-muted"} ${selectedConfig?.textColor || "text-primary"} border ${selectedConfig?.borderColor || "border-primary/20"}`}>
-                      Pos {child.position}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${selectedConfig?.bgLight || "bg-muted"} ${selectedConfig?.textColor || "text-primary"} ${selectedConfig?.borderColor || "border-border"}`}>
+                        Pos {child.position}
+                      </span>
+                      <ChevronRightIcon className="w-4 h-4 text-muted-foreground" />
+                    </div>
                   </button>
                 );
               })}
