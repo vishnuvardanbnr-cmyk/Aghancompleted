@@ -162,44 +162,47 @@ function GenealogyView({ userBoards, currentUserId, currentUserName }: {
   const [children, setChildren] = useState<MatrixChild[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchChildren = useCallback(async (board: string, userId: number) => {
+  async function loadChildren(board: string, userId: number) {
     if (!board) return;
     setIsLoading(true);
+    setChildren([]);
     try {
       const url = userId !== currentUserId
         ? `/api/matrix/${board}?memberId=${userId}`
         : `/api/matrix/${board}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed");
-      const data = await res.json();
-      setChildren(data);
+      setChildren(await res.json());
     } catch {
       setChildren([]);
     } finally {
       setIsLoading(false);
     }
-  }, [currentUserId]);
+  }
 
+  // Load on mount and whenever board changes
   useEffect(() => {
-    fetchChildren(selectedBoard, currentNode.userId);
-  }, [selectedBoard, currentNode.userId, fetchChildren]);
+    loadChildren(selectedBoard, currentUserId);
+    setBreadcrumb([{ userId: currentUserId, name: "Me" }]);
+  }, [selectedBoard]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBoardSelect = (boardType: string) => {
-    setChildren([]);
     setSelectedBoard(boardType);
-    setBreadcrumb([{ userId: currentUserId, name: "Me" }]);
+    // useEffect will handle the fetch
   };
 
   const handleMemberClick = (child: MatrixChild) => {
     if (child.userId === currentNode.userId) return;
-    setChildren([]);
     setBreadcrumb(prev => [...prev, { userId: child.userId, name: child.fullName }]);
+    // Directly fetch with the child's userId — no relay through state
+    loadChildren(selectedBoard, child.userId);
   };
 
   const handleBreadcrumbClick = (index: number) => {
     if (index === breadcrumb.length - 1) return;
-    setChildren([]);
+    const targetEntry = breadcrumb[index];
     setBreadcrumb(prev => prev.slice(0, index + 1));
+    loadChildren(selectedBoard, targetEntry.userId);
   };
 
   const selectedConfig = boardConfig.find(b => b.type === selectedBoard);
