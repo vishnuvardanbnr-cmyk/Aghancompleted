@@ -150,11 +150,15 @@ export function setupAuth(app: Express) {
       if (targetUser.isAdmin) return res.status(400).json({ message: "Cannot impersonate an admin account" });
 
       const adminId = (req.user as any).id;
-      (req.session as any).originalAdminId = adminId;
 
       req.login(targetUser, (err) => {
         if (err) return next(err);
-        res.json({ ...(targetUser as any), isImpersonating: true });
+        // Set AFTER login so it goes on the new/current session (not wiped by session regeneration)
+        (req.session as any).originalAdminId = adminId;
+        req.session.save((saveErr) => {
+          if (saveErr) return next(saveErr);
+          res.json({ ...(targetUser as any), isImpersonating: true });
+        });
       });
     } catch (err) {
       next(err);

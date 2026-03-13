@@ -91,6 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const exitImpersonationMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/exit-impersonation", {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed to exit user view" }));
+        throw new Error(err.message || "Failed to exit user view");
+      }
       return res.json();
     },
     onSuccess: (userData) => {
@@ -98,6 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.clear();
       queryClient.setQueryData(["/api/user"], userData);
       setLocation("/admin/users");
+    },
+    onError: () => {
+      // Session may have been lost — force a full refresh to get clean state
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
     },
   });
 
