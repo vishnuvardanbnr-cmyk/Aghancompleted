@@ -843,6 +843,28 @@ export class DatabaseStorage implements IStorage {
                 description: `Auto-entry to ${nextBoard} Board from Upgrade Wallet`,
                 status: "COMPLETED"
               });
+
+              // Company pool + GST for auto-joined board → admin
+              const nextTotalLevelIncome = nextConfig.levelIncome * nextConfig.levels;
+              const nextCompanyPool = nextConfig.entry - (nextConfig.gst || 0) - (nextConfig.directSponsor || 0) - nextTotalLevelIncome;
+              const autoJoinedUser = await this.getUser(upline[i]);
+              const autoJoinLabel = autoJoinedUser ? autoJoinedUser.fullName : `User #${upline[i]}`;
+              if (adminUser && nextCompanyPool > 0) {
+                await this.addToMainWallet(
+                  adminUser.id,
+                  nextCompanyPool,
+                  `Company pool from ${autoJoinLabel} (${nextBoard} Board auto-entry)`,
+                  upline[i]
+                );
+              }
+              if (adminUser && (nextConfig.gst || 0) > 0) {
+                await this.addToMainWallet(
+                  adminUser.id,
+                  nextConfig.gst,
+                  `GST collected from ${autoJoinLabel} (${nextBoard} Board auto-entry - to be remitted)`,
+                  upline[i]
+                );
+              }
             }
           }
         } else {
@@ -861,6 +883,29 @@ export class DatabaseStorage implements IStorage {
           adminUser.id,
           missedAmount,
           `Level income (${missedLevels} levels) from ${user.fullName} (${boardType} Board - no upline, routed to admin)`,
+          userId
+        );
+      }
+
+      // Company pool → admin wallet
+      // = Entry fee − GST − Direct sponsor − Total level income
+      const totalLevelIncome = config.levelIncome * config.levels;
+      const companyPool = config.entry - (config.gst || 0) - (config.directSponsor || 0) - totalLevelIncome;
+      if (adminUser && companyPool > 0) {
+        await this.addToMainWallet(
+          adminUser.id,
+          companyPool,
+          `Company pool from ${user.fullName} (${boardType} Board entry)`,
+          userId
+        );
+      }
+
+      // GST collected → admin wallet (to be remitted to government)
+      if (adminUser && config.gst > 0) {
+        await this.addToMainWallet(
+          adminUser.id,
+          config.gst,
+          `GST collected from ${user.fullName} (${boardType} Board entry - to be remitted)`,
           userId
         );
       }
@@ -2000,6 +2045,29 @@ export class DatabaseStorage implements IStorage {
                 description: "Auto-entry to Silver Board from Upgrade Wallet",
                 status: "COMPLETED"
               });
+
+              // Company pool + GST for Silver auto-entry → admin
+              const silverConfig = BOARD_CONFIG["SILVER"];
+              const silverTotalLevel = silverConfig.levelIncome * silverConfig.levels; // 3000
+              const silverCompanyPool = silverConfig.entry - (silverConfig.gst || 0) - silverTotalLevel; // 2000
+              const autoJoinedUserRebirth = await this.getUser(upline[i]);
+              const autoLabelRebirth = autoJoinedUserRebirth ? autoJoinedUserRebirth.fullName : `User #${upline[i]}`;
+              if (adminUser && silverCompanyPool > 0) {
+                await this.addToMainWallet(
+                  adminUser.id,
+                  silverCompanyPool,
+                  `Company pool from ${autoLabelRebirth} (SILVER Board auto-entry)`,
+                  upline[i]
+                );
+              }
+              if (adminUser && (silverConfig.gst || 0) > 0) {
+                await this.addToMainWallet(
+                  adminUser.id,
+                  silverConfig.gst,
+                  `GST collected from ${autoLabelRebirth} (SILVER Board auto-entry - to be remitted)`,
+                  upline[i]
+                );
+              }
             }
           }
         }
