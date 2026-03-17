@@ -30,11 +30,6 @@ import {
   Download,
   AlertTriangle,
   ArrowLeft,
-  Copy,
-  Check,
-  User,
-  UserCheck,
-  Hash,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
@@ -215,25 +210,7 @@ export default function Wallet() {
   const [pendingWithdraw, setPendingWithdraw] = useState<{ data: WithdrawFormData; bankDetails: string; fee: number; net: number } | null>(null);
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [copiedCode, setCopiedCode] = useState(false);
-
   const PLATFORM_FEE_RATE = 0.10;
-
-  const handleCopyCode = (code: string) => {
-    navigator.clipboard.writeText(code).then(() => {
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    });
-  };
-
-  const { data: currentUser } = useQuery<{
-    id: number;
-    fullName: string;
-    username: string;
-    referralCode: string;
-    sponsorId: number | null;
-    sponsorName: string | null;
-  }>({ queryKey: ["/api/user"] });
 
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletData>({
     queryKey: ["/api/wallet"],
@@ -675,65 +652,6 @@ export default function Wallet() {
             </DialogContent>
           </Dialog>
         </div>
-
-        {/* Profile Info Section */}
-        {currentUser && (
-          <Card className="overflow-hidden border-border">
-            <CardContent className="p-0">
-              <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4 sm:p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  {/* Left: Avatar + Greeting */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                      <User className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Welcome back</p>
-                      <h2 className="text-lg font-bold leading-tight" data-testid="text-user-fullname">
-                        {currentUser.fullName}
-                      </h2>
-                      <p className="text-xs text-muted-foreground">@{currentUser.username}</p>
-                    </div>
-                  </div>
-
-                  {/* Right: Info pills */}
-                  <div className="flex flex-wrap gap-2 sm:justify-end">
-                    {/* User ID */}
-                    <div className="flex items-center gap-1.5 rounded-full bg-background border border-border px-3 py-1.5 text-xs">
-                      <Hash className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-muted-foreground">ID:</span>
-                      <span className="font-semibold" data-testid="text-user-id">AP{String(currentUser.id).padStart(4, "0")}</span>
-                    </div>
-
-                    {/* Referral Code */}
-                    <button
-                      type="button"
-                      onClick={() => handleCopyCode(currentUser.referralCode)}
-                      className="flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1.5 text-xs hover:bg-primary/20 transition-colors"
-                      data-testid="button-copy-referral-code"
-                    >
-                      <span className="text-muted-foreground">Code:</span>
-                      <span className="font-bold text-primary tracking-wide">{currentUser.referralCode}</span>
-                      {copiedCode
-                        ? <Check className="w-3.5 h-3.5 text-green-500" />
-                        : <Copy className="w-3.5 h-3.5 text-primary" />
-                      }
-                    </button>
-
-                    {/* Referred by */}
-                    {currentUser.sponsorName && (
-                      <div className="flex items-center gap-1.5 rounded-full bg-background border border-border px-3 py-1.5 text-xs">
-                        <UserCheck className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground">Referred by:</span>
-                        <span className="font-semibold" data-testid="text-referred-by">{currentUser.sponsorName}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Balance Cards */}
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
