@@ -32,6 +32,8 @@ import {
   RefreshCw,
   Gift,
   IndianRupee,
+  Hash,
+  UserCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -207,31 +209,59 @@ export default function Dashboard() {
     <Layout>
       <div className="space-y-4">
         {/* Welcome Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-bold" data-testid="text-welcome">
-              Welcome back, {user?.fullName?.split(" ")[0]}!
-            </h1>
-            <p className="text-sm text-muted-foreground">Here's your earnings overview</p>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h1 className="text-lg font-bold" data-testid="text-welcome">
+                Welcome back, {user?.fullName?.split(" ")[0]}!
+              </h1>
+              <p className="text-sm text-muted-foreground">Here's your earnings overview</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-lg">
-            <span className="text-xs text-muted-foreground">Your Code:</span>
-            <span className="font-mono text-sm font-bold text-primary" data-testid="text-referral-code">
-              AP{user?.referralCode}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-7 h-7"
-              onClick={copyReferralCode}
-              data-testid="button-copy-referral"
-            >
-              {copied ? (
-                <CheckCircle className="w-3.5 h-3.5 text-primary" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-            </Button>
+
+          {/* Info pills row */}
+          <div className="flex flex-wrap gap-2">
+            {/* User ID */}
+            {user?.id && (
+              <div className="flex items-center gap-1.5 rounded-full bg-muted border border-border px-3 py-1.5 text-xs">
+                <Hash className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">ID:</span>
+                <span className="font-semibold" data-testid="text-user-id">
+                  AP{String(user.id).padStart(4, "0")}
+                </span>
+              </div>
+            )}
+
+            {/* Referral Code */}
+            <div className="flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1.5 text-xs">
+              <span className="text-muted-foreground">Your Code:</span>
+              <span className="font-mono font-bold text-primary tracking-wide" data-testid="text-referral-code">
+                {user?.referralCode}
+              </span>
+              <button
+                type="button"
+                onClick={copyReferralCode}
+                className="hover:text-primary transition-colors"
+                data-testid="button-copy-referral"
+              >
+                {copied ? (
+                  <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-primary" />
+                )}
+              </button>
+            </div>
+
+            {/* Referred by */}
+            {user?.sponsorName && (
+              <div className="flex items-center gap-1.5 rounded-full bg-muted border border-border px-3 py-1.5 text-xs">
+                <UserCheck className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-muted-foreground">Referred by:</span>
+                <span className="font-semibold" data-testid="text-referred-by">
+                  {user.sponsorName}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

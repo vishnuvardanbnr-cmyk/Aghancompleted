@@ -12,6 +12,8 @@ interface User {
   referralCode: string;
   isAdmin: boolean;
   isImpersonating?: boolean;
+  sponsorId?: number | null;
+  sponsorName?: string | null;
 }
 
 interface AuthContextType {
