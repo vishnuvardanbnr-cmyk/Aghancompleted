@@ -60,6 +60,46 @@ export async function registerRoutes(
     }
   });
 
+  // TEMPORARY: One-time production DB reset endpoint — remove after use
+  app.post("/api/__reset_prod_db__", async (req, res) => {
+    if (req.body.secret !== "AGHAN_RESET_2026_XK9") return res.status(403).json({ message: "Forbidden" });
+    try {
+      await db.execute(sql`DELETE FROM matrix_positions`);
+      await db.execute(sql`DELETE FROM ev_rewards`);
+      await db.execute(sql`DELETE FROM rebirth_accounts`);
+      await db.execute(sql`DELETE FROM kyc_documents`);
+      await db.execute(sql`DELETE FROM invoices`);
+      await db.execute(sql`DELETE FROM transactions`);
+      await db.execute(sql`DELETE FROM withdrawals`);
+      await db.execute(sql`DELETE FROM boards`);
+      await db.execute(sql`DELETE FROM wallets`);
+      await db.execute(sql`DELETE FROM users`);
+      await db.execute(sql`ALTER SEQUENCE users_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE wallets_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE boards_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE transactions_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE withdrawals_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE invoices_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE kyc_documents_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE ev_rewards_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE rebirth_accounts_id_seq RESTART WITH 1`);
+      await db.execute(sql`ALTER SEQUENCE matrix_positions_id_seq RESTART WITH 1`);
+      const { hashPassword } = await import("./auth");
+      const hashedPw = await hashPassword("Admin@9876");
+      await db.execute(sql`
+        INSERT INTO users (username, password, full_name, email, mobile, referral_code, is_admin, is_company)
+        VALUES ('admin', ${hashedPw}, 'Aghan Promoters Admin', 'admin@aghanpromoters.com', '9000000000', 'AGHANADM', true, false)
+      `);
+      await db.execute(sql`
+        INSERT INTO wallets (user_id, main_balance, upgrade_balance, rebirth_balance, total_earnings)
+        VALUES (1, '0.00', '0.00', '0.00', '0.00')
+      `);
+      res.json({ success: true, message: "Production DB wiped. Admin: admin / Admin@9876" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Dashboard
   app.get(api.user.dashboard.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
