@@ -60,9 +60,9 @@ export async function registerRoutes(
     }
   });
 
-  // TEMPORARY: One-time production DB reset endpoint — remove after use
-  app.post("/api/__reset_prod_db__", async (req, res) => {
-    if (req.body.secret !== "AGHAN_RESET_2026_XK9") return res.status(403).json({ message: "Forbidden" });
+  // TEMPORARY: One-time production DB reset — remove after use
+  app.get("/api/__reset_prod_db__", async (req, res) => {
+    if (req.query.secret !== "AGHAN_RESET_2026_XK9") return res.status(403).send("Forbidden");
     try {
       await db.execute(sql`DELETE FROM matrix_positions`);
       await db.execute(sql`DELETE FROM ev_rewards`);
@@ -94,11 +94,12 @@ export async function registerRoutes(
         INSERT INTO wallets (user_id, main_balance, upgrade_balance, rebirth_balance, total_earnings)
         VALUES (1, '0.00', '0.00', '0.00', '0.00')
       `);
-      res.json({ success: true, message: "Production DB wiped. Admin: admin / Admin@9876" });
+      res.send("<h2>Done! Production DB wiped clean.</h2><p>Admin login: <b>admin</b> / <b>Admin@9876</b></p>");
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      res.status(500).send("Error: " + error.message);
     }
   });
+
 
   // Dashboard
   app.get(api.user.dashboard.path, async (req, res) => {
