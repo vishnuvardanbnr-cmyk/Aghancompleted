@@ -68,37 +68,26 @@ export async function registerRoutes(
     const wallet = await storage.getWallet(userId);
     const finalWallet = wallet || await storage.createWallet(userId);
     
-    // Get direct referrals count (only ACTIVE direct referrals with EV board)
+    // Get direct referrals count (for display purposes only)
     const directReferralCount = await storage.getActiveDirectReferralCount(userId);
     
     // Get user's boards with individual progress
     const userBoards = await storage.getUserBoards(userId);
     
-    // Calculate per-board progress
+    // Calculate per-board progress — all boards use actual matrix placements
     const boardsWithProgress = await Promise.all(
       userBoards.map(async (board) => {
-        let progress = 0;
-        let filled = 0;
-        
-        if (board.type === "EV") {
-          // EV Board: progress based on active direct referrals
-          filled = directReferralCount;
-        } else {
-          // Other boards: progress based on level 1 matrix positions filled
-          filled = await storage.getMatrixChildrenCount(userId, board.type);
-        }
-        
-        progress = Math.min(100, Math.round((filled / 6) * 100));
-        
+        const filled = await storage.getMatrixChildrenCount(userId, board.type);
+        const progress = Math.min(100, Math.round((filled / 6) * 100));
         return { ...board, progress, filled };
       })
     );
     
-    // Get placements under user for EV board (to calculate level completion)
+    // Level-1 matrix placements under user for EV board
     const level1Count = await storage.getMatrixChildrenCount(userId, "EV");
     
-    // Overall progress: based on 6 direct referrals needed
-    const progress = Math.min(100, Math.round((directReferralCount / 6) * 100));
+    // Overall progress: based on EV matrix level-1 placements (not direct referrals)
+    const progress = Math.min(100, Math.round((level1Count / 6) * 100));
 
     const totalWithdrawn = await storage.getUserTotalWithdrawals(userId);
 
