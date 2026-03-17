@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -23,8 +24,19 @@ import {
   Filter,
   Network,
   Share2,
+  List,
+  Home,
+  ChevronRight as ChevronRightIcon,
+  ChevronLeft,
+  Zap,
+  Award,
+  Star,
+  Gem,
+  Diamond,
+  Crown,
+  X,
 } from "lucide-react";
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface MatrixEntry {
@@ -310,6 +322,295 @@ function TreeNodeCard({
 
 const BOARD_OPTIONS = ["EV", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "KING"];
 
+const boardConfig = [
+  { type: "EV", icon: Zap, color: "bg-emerald-500", textColor: "text-emerald-600", borderColor: "border-emerald-200", bgLight: "bg-emerald-50 dark:bg-emerald-950/30" },
+  { type: "SILVER", icon: Award, color: "bg-gray-400", textColor: "text-gray-600", borderColor: "border-gray-200", bgLight: "bg-gray-50 dark:bg-gray-900/30" },
+  { type: "GOLD", icon: Star, color: "bg-yellow-500", textColor: "text-yellow-600", borderColor: "border-yellow-200", bgLight: "bg-yellow-50 dark:bg-yellow-950/30" },
+  { type: "PLATINUM", icon: Gem, color: "bg-blue-400", textColor: "text-blue-600", borderColor: "border-blue-200", bgLight: "bg-blue-50 dark:bg-blue-950/30" },
+  { type: "DIAMOND", icon: Diamond, color: "bg-purple-400", textColor: "text-purple-600", borderColor: "border-purple-200", bgLight: "bg-purple-50 dark:bg-purple-950/30" },
+  { type: "KING", icon: Crown, color: "bg-orange-500", textColor: "text-orange-600", borderColor: "border-orange-200", bgLight: "bg-orange-50 dark:bg-orange-950/30" },
+];
+
+interface BreadcrumbEntry {
+  userId: number;
+  name: string;
+}
+
+interface AdminMatrixChild {
+  id: number;
+  username: string;
+  fullName: string;
+  position: number;
+  level: number;
+}
+
+interface AdminUserSearchResult {
+  id: number;
+  username: string;
+  fullName: string;
+  referralCode: string;
+}
+
+function BrowseGenealogyView() {
+  const [userSearch, setUserSearch] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AdminUserSearchResult | null>(null);
+  const [selectedBoard, setSelectedBoard] = useState<string>("EV");
+  const [breadcrumb, setBreadcrumb] = useState<BreadcrumbEntry[]>([]);
+  const [children, setChildren] = useState<AdminMatrixChild[]>([]);
+  const [isLoadingChildren, setIsLoadingChildren] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const { data: searchData } = useQuery<{ users: AdminUserSearchResult[]; total: number }>({
+    queryKey: ["/api/admin/users", 1, userSearch],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/users?page=1&limit=10&search=${encodeURIComponent(userSearch)}`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: userSearch.length >= 1 && showDropdown,
+  });
+
+  const userResults = searchData?.users || [];
+
+  async function loadChildren(userId: number, board: string) {
+    setIsLoadingChildren(true);
+    setChildren([]);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/matrix/${board}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      setChildren(await res.json());
+    } catch {
+      setChildren([]);
+    } finally {
+      setIsLoadingChildren(false);
+    }
+  }
+
+  function selectUser(u: AdminUserSearchResult) {
+    setSelectedUser(u);
+    setUserSearch(u.fullName);
+    setShowDropdown(false);
+    setBreadcrumb([{ userId: u.id, name: u.fullName }]);
+    loadChildren(u.id, selectedBoard);
+  }
+
+  function handleBoardSelect(board: string) {
+    setSelectedBoard(board);
+    if (selectedUser && breadcrumb.length > 0) {
+      const root = breadcrumb[0];
+      setBreadcrumb([root]);
+      loadChildren(root.userId, board);
+    }
+  }
+
+  function handleMemberClick(child: AdminMatrixChild) {
+    setBreadcrumb(prev => [...prev, { userId: child.id, name: child.fullName }]);
+    loadChildren(child.id, selectedBoard);
+  }
+
+  function handleBreadcrumbClick(index: number) {
+    if (index === breadcrumb.length - 1) return;
+    const target = breadcrumb[index];
+    setBreadcrumb(prev => prev.slice(0, index + 1));
+    loadChildren(target.userId, selectedBoard);
+  }
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedConfig = boardConfig.find(b => b.type === selectedBoard);
+
+  return (
+    <Card>
+      <CardHeader className="py-4 px-4">
+        <CardTitle className="text-base flex items-center gap-2">
+          <GitBranch className="w-4 h-4 text-primary" />
+          Genealogy View
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Select any user to browse their matrix tree by board. Click a member to see their downline.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-4 pb-4 space-y-4">
+        {/* User Picker */}
+        <div className="relative" ref={dropdownRef}>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search user by name, username or referral code..."
+              value={userSearch}
+              onChange={(e) => {
+                setUserSearch(e.target.value);
+                setShowDropdown(true);
+                if (!e.target.value) {
+                  setSelectedUser(null);
+                  setBreadcrumb([]);
+                  setChildren([]);
+                }
+              }}
+              onFocus={() => setShowDropdown(true)}
+              className="pl-10 pr-10"
+              data-testid="input-browse-user-search"
+            />
+            {selectedUser && (
+              <button
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setSelectedUser(null);
+                  setUserSearch("");
+                  setBreadcrumb([]);
+                  setChildren([]);
+                }}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {showDropdown && userSearch.length >= 1 && userResults.length > 0 && (
+            <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg overflow-hidden">
+              {userResults.map((u) => (
+                <button
+                  key={u.id}
+                  onMouseDown={() => selectUser(u)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/70 transition-colors"
+                  data-testid={`option-user-${u.id}`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                    {u.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{u.fullName}</p>
+                    <p className="text-xs text-muted-foreground">@{u.username} · {u.referralCode}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!selectedUser ? (
+          <div className="text-center py-10 rounded-lg border border-dashed space-y-2">
+            <Users className="w-8 h-8 mx-auto text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Search and select a user to view their genealogy</p>
+          </div>
+        ) : (
+          <>
+            {/* Board Tabs */}
+            <div className="flex flex-wrap gap-2">
+              {BOARD_OPTIONS.map(boardType => {
+                const cfg = boardConfig.find(b => b.type === boardType);
+                const Icon = cfg?.icon || Zap;
+                const isSelected = selectedBoard === boardType;
+                return (
+                  <button
+                    key={boardType}
+                    onClick={() => handleBoardSelect(boardType)}
+                    data-testid={`button-admin-board-${boardType}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                      isSelected
+                        ? `${cfg?.color} text-white border-transparent shadow`
+                        : "bg-background border-border text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {boardType}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {breadcrumb.map((entry, index) => {
+                const isLast = index === breadcrumb.length - 1;
+                return (
+                  <span key={index} className="flex items-center gap-1.5">
+                    {index > 0 && <ChevronRightIcon className="w-3 h-3 text-muted-foreground shrink-0" />}
+                    <button
+                      onClick={() => handleBreadcrumbClick(index)}
+                      disabled={isLast}
+                      data-testid={`admin-breadcrumb-${index}`}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-150 ${
+                        isLast
+                          ? `${selectedConfig?.color || "bg-primary"} text-white border-transparent shadow-sm cursor-default`
+                          : "bg-muted/60 text-muted-foreground border-border hover:bg-muted hover:text-foreground active:scale-95 cursor-pointer"
+                      }`}
+                    >
+                      {index === 0 && <Home className="w-3 h-3 shrink-0" />}
+                      <span className="max-w-[120px] truncate">{entry.name}</span>
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+
+            {/* Member List */}
+            {isLoadingChildren ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-14 rounded-lg" />)}
+              </div>
+            ) : children.length > 0 ? (
+              <div className="space-y-2">
+                {children.map((child) => {
+                  const initials = child.fullName.split(" ").map(n => n[0]).join("").toUpperCase();
+                  return (
+                    <button
+                      key={child.id}
+                      onClick={() => handleMemberClick(child)}
+                      data-testid={`admin-genealogy-member-${child.id}`}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left cursor-pointer transition-all duration-150
+                        hover:shadow-sm hover:border-primary/30 active:scale-[0.99]
+                        ${selectedConfig?.bgLight || "bg-muted/20"} ${selectedConfig?.borderColor || "border-border"}
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50`}
+                    >
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-full text-white text-xs font-bold shrink-0 ${selectedConfig?.color || "bg-primary"}`}>
+                        {initials.slice(0, 2)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate">{child.fullName}</p>
+                        <p className="text-xs text-muted-foreground truncate">@{child.username}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${selectedConfig?.bgLight || "bg-muted"} ${selectedConfig?.textColor || "text-primary"} ${selectedConfig?.borderColor || "border-border"}`}>
+                          Pos {child.position}
+                        </span>
+                        <ChevronRightIcon className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-6 rounded-lg border border-dashed space-y-3">
+                <Users className="w-8 h-8 mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No members under this position yet</p>
+                {breadcrumb.length > 1 && (
+                  <button
+                    onClick={() => handleBreadcrumbClick(breadcrumb.length - 2)}
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    data-testid="button-admin-genealogy-back"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Go back
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminGenealogy() {
   const [scale, setScale] = useState(0.7);
   const [position, setPosition] = useState({ x: 40, y: 20 });
@@ -318,7 +619,7 @@ export default function AdminGenealogy() {
   const [searchTerm, setSearchTerm] = useState("");
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const [collapsedNodes, setCollapsedNodes] = useState<Set<number>>(new Set());
-  const [treeMode, setTreeMode] = useState<"matrix" | "sponsor">("matrix");
+  const [treeMode, setTreeMode] = useState<"matrix" | "sponsor" | "browse">("matrix");
   const [matrixBoard, setMatrixBoard] = useState("EV");
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -341,7 +642,7 @@ export default function AdminGenealogy() {
     enabled: treeMode === "matrix",
   });
 
-  const isLoading = treeMode === "matrix" ? matrixLoading : sponsorLoading;
+  const isLoading = treeMode === "browse" ? false : treeMode === "matrix" ? matrixLoading : sponsorLoading;
 
   const allUsers = treeMode === "sponsor" ? (sponsorUsers || []) : [];
 
@@ -513,12 +814,21 @@ export default function AdminGenealogy() {
             </button>
             <button
               onClick={() => { setTreeMode("sponsor"); setCollapsedNodes(new Set()); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-x ${
                 treeMode === "sponsor" ? "bg-emerald-500 text-white" : "bg-card text-muted-foreground hover:bg-muted"
               }`}
             >
               <Share2 className="w-3.5 h-3.5" />
               Sponsor Tree
+            </button>
+            <button
+              onClick={() => setTreeMode("browse")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${
+                treeMode === "browse" ? "bg-emerald-500 text-white" : "bg-card text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              Browse
             </button>
           </div>
 
@@ -536,14 +846,18 @@ export default function AdminGenealogy() {
             </Select>
           )}
 
-          <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">{totalNodes}</span> members
-            &middot;
-            <span className="font-semibold text-foreground">{Math.round(scale * 100)}%</span> zoom
-          </div>
+          {treeMode !== "browse" && (
+            <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">{totalNodes}</span> members
+              &middot;
+              <span className="font-semibold text-foreground">{Math.round(scale * 100)}%</span> zoom
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-col md:flex-row gap-3">
+        {treeMode === "browse" && <BrowseGenealogyView />}
+
+        {treeMode !== "browse" && <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -574,9 +888,9 @@ export default function AdminGenealogy() {
               <Maximize2 className="w-4 h-4" />
             </Button>
           </div>
-        </div>
+        </div>}
 
-        {searchTerm && searchResults.length > 0 && (
+        {treeMode !== "browse" && searchTerm && searchResults.length > 0 && (
           <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg">
             <span className="text-xs text-muted-foreground self-center">Results:</span>
             {searchResults.slice(0, 10).map((u) => (
@@ -600,7 +914,7 @@ export default function AdminGenealogy() {
           </div>
         )}
 
-        <Card className="overflow-hidden border-0 shadow-md">
+        {treeMode !== "browse" && <Card className="overflow-hidden border-0 shadow-md">
           <CardContent className="p-0">
             <div
               ref={containerRef}
@@ -660,7 +974,7 @@ export default function AdminGenealogy() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card>}
       </div>
     </Layout>
   );
