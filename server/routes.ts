@@ -161,20 +161,24 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Insufficient balance" });
       }
 
-      // Deduct balance
+      const PLATFORM_FEE_RATE = 0.10;
+      const platformFee = Math.round(amount * PLATFORM_FEE_RATE * 100) / 100;
+      const netAmount = Math.round((amount - platformFee) * 100) / 100;
+
+      // Deduct full requested amount from wallet
       await storage.updateWallet(wallet.userId, { 
         mainBalance: (Number(wallet.mainBalance) - amount).toString() 
       });
 
-      // Create record
-      const withdrawal = await storage.createWithdrawal(wallet.userId, amount, bankDetails);
+      // Create withdrawal record with fee breakdown
+      const withdrawal = await storage.createWithdrawal(wallet.userId, amount, bankDetails, platformFee, netAmount);
       
       // Create transaction
       await storage.createTransaction({
         userId: wallet.userId,
         amount: amount.toString(),
         type: "WITHDRAWAL",
-        description: "Withdrawal Request",
+        description: `Withdrawal Request (Platform fee: ₹${platformFee}, You receive: ₹${netAmount})`,
         status: "PENDING"
       });
 

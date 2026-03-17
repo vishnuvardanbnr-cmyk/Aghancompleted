@@ -28,7 +28,10 @@ import {
   FileText,
   CreditCard,
   Download,
+  AlertTriangle,
+  ArrowLeft,
 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 
 interface Invoice {
@@ -203,8 +206,12 @@ function printInvoice(invoice: Invoice) {
 export default function Wallet() {
   const { toast } = useToast();
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [showConfirmStep, setShowConfirmStep] = useState(false);
+  const [pendingWithdraw, setPendingWithdraw] = useState<{ data: WithdrawFormData; bankDetails: string; fee: number; net: number } | null>(null);
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const PLATFORM_FEE_RATE = 0.10;
 
   const { data: wallet, isLoading: walletLoading } = useQuery<WalletData>({
     queryKey: ["/api/wallet"],
@@ -259,6 +266,8 @@ export default function Wallet() {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet/history"] });
       toast({ title: "Withdrawal request submitted!" });
       setWithdrawOpen(false);
+      setShowConfirmStep(false);
+      setPendingWithdraw(null);
       withdrawForm.reset();
       setPaymentMode("BANK_TRANSFER");
       setUseKycDetails(false);
@@ -296,7 +305,16 @@ export default function Wallet() {
             <h1 className="text-lg font-bold">Wallet</h1>
             <p className="text-sm text-muted-foreground">Manage your earnings and withdrawals</p>
           </div>
-          <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+          <Dialog open={withdrawOpen} onOpenChange={(open) => {
+            setWithdrawOpen(open);
+            if (!open) {
+              setShowConfirmStep(false);
+              setPendingWithdraw(null);
+              withdrawForm.reset();
+              setPaymentMode("BANK_TRANSFER");
+              setUseKycDetails(false);
+            }
+          }}>
             <DialogTrigger asChild>
               <Button data-testid="button-withdraw">
                 <ArrowUpRight className="w-4 h-4 mr-2" />
@@ -305,13 +323,84 @@ export default function Wallet() {
             </DialogTrigger>
             <DialogContent className="max-h-[85vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Request Withdrawal</DialogTitle>
+                <DialogTitle>{showConfirmStep ? "Confirm Withdrawal" : "Request Withdrawal"}</DialogTitle>
                 <DialogDescription>
-                  Choose your preferred payment mode and enter the details. Minimum Rs.100.
+                  {showConfirmStep
+                    ? "Review the fee breakdown before confirming your withdrawal."
+                    : "Choose your preferred payment mode and enter the details. Minimum Rs.100."}
                 </DialogDescription>
               </DialogHeader>
+
+              {/* ── CONFIRMATION STEP ── */}
+              {showConfirmStep && pendingWithdraw && (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Withdrawal Amount</span>
+                      <span className="font-medium">₹{pendingWithdraw.data.amount.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="flex justify-between text-destructive">
+                      <span>Platform Fee (10%)</span>
+                      <span>− ₹{pendingWithdraw.fee.toLocaleString("en-IN")}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between text-base font-bold">
+                      <span>You Will Receive</span>
+                      <span className="text-primary">₹{pendingWithdraw.net.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>A 10% platform fee is applied to all withdrawals. The net amount will be transferred to your payment account.</span>
+                  </div>
+                  <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium text-foreground text-sm">Payment Details</p>
+                    <p className="whitespace-pre-line">{pendingWithdraw.bankDetails}</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button type="button" variant="outline" className="flex-1 gap-2" onClick={() => setShowConfirmStep(false)}>
+                      <ArrowLeft className="w-4 h-4" /> Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      className="flex-1"
+                      disabled={withdrawMutation.isPending}
+                      onClick={() => withdrawMutation.mutate(pendingWithdraw.data)}
+                      data-testid="button-confirm-withdraw"
+                    >
+                      {withdrawMutation.isPending ? "Processing..." : "Confirm Withdrawal"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── FORM STEP ── */}
+              {!showConfirmStep && (
               <Form {...withdrawForm}>
-                <form onSubmit={withdrawForm.handleSubmit((data) => withdrawMutation.mutate(data))} className="space-y-4">
+                <form onSubmit={withdrawForm.handleSubmit((data) => {
+                  // Compute bank details string (same logic as mutationFn)
+                  let bankDetails = `Payment Mode: ${PAYMENT_MODES.find(m => m.value === paymentMode)?.label || paymentMode}\n`;
+                  if (paymentMode === "BANK_TRANSFER") {
+                    if (!data.accountHolderName || !data.bankName || !data.accountNumber || !data.ifscCode) {
+                      toast({ title: "Please fill all bank details", variant: "destructive" });
+                      return;
+                    }
+                    bankDetails += `Account Holder: ${data.accountHolderName}\nBank: ${data.bankName}\nAccount No: ${data.accountNumber}\nIFSC: ${data.ifscCode}`;
+                  } else if (paymentMode === "GPAY") {
+                    if (!data.gpayNumber) { toast({ title: "Please enter GPay number", variant: "destructive" }); return; }
+                    bankDetails += `GPay Number: ${data.gpayNumber}`;
+                  } else if (paymentMode === "PHONEPE") {
+                    if (!data.phonePeNumber) { toast({ title: "Please enter PhonePe number", variant: "destructive" }); return; }
+                    bankDetails += `PhonePe Number: ${data.phonePeNumber}`;
+                  } else if (paymentMode === "UPI") {
+                    if (!data.upiId) { toast({ title: "Please enter UPI ID", variant: "destructive" }); return; }
+                    bankDetails += `UPI ID: ${data.upiId}`;
+                  }
+                  const fee = Math.round(data.amount * PLATFORM_FEE_RATE * 100) / 100;
+                  const net = Math.round((data.amount - fee) * 100) / 100;
+                  setPendingWithdraw({ data, bankDetails, fee, net });
+                  setShowConfirmStep(true);
+                })} className="space-y-4">
                   <FormField
                     control={withdrawForm.control}
                     name="amount"
@@ -526,16 +615,41 @@ export default function Wallet() {
                     )}
                   </div>
 
+                  {/* Live fee preview */}
+                  {(withdrawForm.watch("amount") || 0) > 0 && (() => {
+                    const amt = withdrawForm.watch("amount") || 0;
+                    const fee = Math.round(amt * PLATFORM_FEE_RATE * 100) / 100;
+                    const net = Math.round((amt - fee) * 100) / 100;
+                    return (
+                      <div className="rounded-lg bg-muted/50 border border-border p-3 space-y-1.5 text-sm">
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Withdrawal Amount</span>
+                          <span>₹{amt.toLocaleString("en-IN")}</span>
+                        </div>
+                        <div className="flex justify-between text-destructive">
+                          <span>Platform Fee (10%)</span>
+                          <span>− ₹{fee.toLocaleString("en-IN")}</span>
+                        </div>
+                        <Separator />
+                        <div className="flex justify-between font-semibold">
+                          <span>You Will Receive</span>
+                          <span className="text-primary">₹{net.toLocaleString("en-IN")}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div className="flex justify-end gap-3">
                     <Button type="button" variant="outline" onClick={() => setWithdrawOpen(false)}>
                       Cancel
                     </Button>
                     <Button type="submit" disabled={withdrawMutation.isPending} data-testid="button-submit-withdraw">
-                      {withdrawMutation.isPending ? "Processing..." : "Submit Request"}
+                      Review &amp; Confirm
                     </Button>
                   </div>
                 </form>
               </Form>
+              )}
             </DialogContent>
           </Dialog>
         </div>

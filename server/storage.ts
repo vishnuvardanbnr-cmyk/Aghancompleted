@@ -62,7 +62,7 @@ export interface IStorage {
   updateBoardStatus(userId: number, boardType: string, status: string): Promise<void>;
   
   // Withdrawal
-  createWithdrawal(userId: number, amount: number, bankDetails: string): Promise<any>;
+  createWithdrawal(userId: number, amount: number, bankDetails: string, platformFee: number, netAmount: number): Promise<any>;
   
   // Rebirth Accounts
   getRebirthAccounts(userId: number): Promise<RebirthAccount[]>;
@@ -843,8 +843,14 @@ export class DatabaseStorage implements IStorage {
     return { success: true, message: `Successfully joined ${boardType} Board` };
   }
 
-  async createWithdrawal(userId: number, amount: number, bankDetails: string): Promise<any> {
-    const [w] = await db.insert(withdrawals).values({ userId, amount: amount as any, bankDetails }).returning();
+  async createWithdrawal(userId: number, amount: number, bankDetails: string, platformFee: number, netAmount: number): Promise<any> {
+    const [w] = await db.insert(withdrawals).values({
+      userId,
+      amount: amount as any,
+      platformFee: platformFee as any,
+      netAmount: netAmount as any,
+      bankDetails,
+    }).returning();
     return w;
   }
 

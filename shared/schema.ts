@@ -88,6 +88,8 @@ export const withdrawals = pgTable("withdrawals", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
   amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  platformFee: decimal("platform_fee", { precision: 12, scale: 2 }).default("0"),
+  netAmount: decimal("net_amount", { precision: 12, scale: 2 }),
   status: transactionStatusEnum("status").default("PENDING"),
   bankDetails: text("bank_details"),
   adminNote: text("admin_note"),
