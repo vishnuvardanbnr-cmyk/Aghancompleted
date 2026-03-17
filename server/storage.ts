@@ -748,6 +748,26 @@ export class DatabaseStorage implements IStorage {
           userId
         );
       }
+
+      // Company pool (₹3,900) → admin wallet
+      if (adminUser && config.company) {
+        await this.addToMainWallet(
+          adminUser.id,
+          config.company,
+          `Company pool from ${user.fullName} (EV Board entry)`,
+          userId
+        );
+      }
+
+      // GST collected (₹900) → admin wallet (to be remitted to government)
+      if (adminUser && config.gst) {
+        await this.addToMainWallet(
+          adminUser.id,
+          config.gst,
+          `GST collected from ${user.fullName} (EV Board entry - to be remitted)`,
+          userId
+        );
+      }
     }
 
     if (boardType !== "EV") {
@@ -1992,6 +2012,26 @@ export class DatabaseStorage implements IStorage {
           adminUser.id,
           missedAmount,
           `Level income (${missedLevels} levels) from ${rebirthLabel} (EV Rebirth - no upline, routed to admin)`,
+          userId
+        );
+      }
+
+      // Company pool (₹3,900) → admin wallet
+      if (adminUser && config.company) {
+        await this.addToMainWallet(
+          adminUser.id,
+          config.company,
+          `Company pool from ${rebirthLabel} (EV Board Rebirth entry)`,
+          userId
+        );
+      }
+
+      // GST collected (₹900) → admin wallet
+      if (adminUser && config.gst) {
+        await this.addToMainWallet(
+          adminUser.id,
+          config.gst,
+          `GST collected from ${rebirthLabel} (EV Board Rebirth entry - to be remitted)`,
           userId
         );
       }
