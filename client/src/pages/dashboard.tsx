@@ -208,62 +208,67 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="space-y-4">
-        {/* Welcome Header */}
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <h1 className="text-lg font-bold" data-testid="text-welcome">
-                Welcome back, {user?.fullName?.split(" ")[0]}!
-              </h1>
-              <p className="text-sm text-muted-foreground">Here's your earnings overview</p>
-            </div>
-          </div>
-
-          {/* Info pills row */}
-          <div className="flex flex-wrap gap-2">
-            {/* User ID */}
-            {user?.id && (
-              <div className="flex items-center gap-1.5 rounded-full bg-muted border border-border px-3 py-1.5 text-xs">
-                <Hash className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">ID:</span>
-                <span className="font-semibold" data-testid="text-user-id">
-                  AP{String(user.id).padStart(4, "0")}
-                </span>
+        {/* Welcome Card */}
+        <Card className="border border-border">
+          <CardContent className="p-4">
+            {/* Top: Avatar + Name */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                <Users className="w-6 h-6 text-primary" />
               </div>
-            )}
+              <div>
+                <p className="text-xs text-muted-foreground">Welcome back</p>
+                <h1 className="text-lg font-bold leading-tight" data-testid="text-welcome">
+                  {user?.fullName}
+                </h1>
+                <p className="text-xs text-muted-foreground">@{user?.username}</p>
+              </div>
+            </div>
 
-            {/* Referral Code */}
-            <div className="flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1.5 text-xs">
-              <span className="text-muted-foreground">Your Code:</span>
-              <span className="font-mono font-bold text-primary tracking-wide" data-testid="text-referral-code">
-                {user?.referralCode}
-              </span>
+            {/* Bottom: Info pills */}
+            <div className="flex flex-wrap gap-2">
+              {/* User ID */}
+              {user?.id && (
+                <div className="flex items-center gap-1.5 rounded-full bg-muted border border-border px-3 py-1.5 text-xs">
+                  <Hash className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground">ID:</span>
+                  <span className="font-semibold" data-testid="text-user-id">
+                    AP{String(user.id).padStart(4, "0")}
+                  </span>
+                </div>
+              )}
+
+              {/* Referral Code */}
               <button
                 type="button"
                 onClick={copyReferralCode}
-                className="hover:text-primary transition-colors"
+                className="flex items-center gap-1.5 rounded-full bg-muted border border-border px-3 py-1.5 text-xs hover:bg-muted/80 transition-colors"
                 data-testid="button-copy-referral"
               >
+                <span className="text-muted-foreground">Code:</span>
+                <span className="font-mono font-bold text-primary tracking-wide" data-testid="text-referral-code">
+                  {user?.referralCode}
+                </span>
                 {copied ? (
                   <CheckCircle className="w-3.5 h-3.5 text-green-500" />
                 ) : (
-                  <Copy className="w-3.5 h-3.5 text-primary" />
+                  <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                 )}
               </button>
-            </div>
 
-            {/* Referred by */}
-            {user?.sponsorName && (
-              <div className="flex items-center gap-1.5 rounded-full bg-muted border border-border px-3 py-1.5 text-xs">
-                <UserCheck className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">Referred by:</span>
-                <span className="font-semibold" data-testid="text-referred-by">
-                  {user.sponsorName}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+              {/* Referred by */}
+              {user?.sponsorName && (
+                <div className="flex items-center gap-1.5 rounded-full bg-muted border border-border px-3 py-1.5 text-xs">
+                  <UserCheck className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground">Referred by:</span>
+                  <span className="font-semibold" data-testid="text-referred-by">
+                    {user.sponsorName}
+                  </span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Stats Grid */}
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
