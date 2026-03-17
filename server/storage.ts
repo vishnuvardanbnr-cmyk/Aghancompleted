@@ -906,7 +906,12 @@ export class DatabaseStorage implements IStorage {
 
           await this.placeCompanyInBoard("SILVER");
         } else {
-          await this.createEvReward(userId);
+          // EV Vehicle reward is only given when BOTH levels are complete:
+          // Level 1: 6 direct children, Level 2: all 36 grandchildren (6×6)
+          // The board is marked COMPLETED here at level 1, but reward waits for level 2.
+          // Check if userId's PARENT in the EV matrix has now achieved 36 grandchildren.
+          await this.checkAndCreateEVRewardForParent(userId);
+
           const nextBoard = getNextBoard(boardType);
           if (nextBoard) {
             const existingNext = await this.getBoard(userId, nextBoard);
@@ -2019,6 +2024,58 @@ export class DatabaseStorage implements IStorage {
 
   // =========== EV REWARD METHODS ===========
 
+  async checkAndCreateEVRewardForParent(completedChildUserId: number): Promise<void> {
+    // Find completedChildUserId's parent in the EV matrix (non-rebirth boards only)
+    const myPosition = await db
+      .select({ parentId: matrixPositions.parentId })
+      .from(matrixPositions)
+      .innerJoin(boards, eq(matrixPositions.boardId, boards.id))
+      .where(and(
+        eq(matrixPositions.userId, completedChildUserId),
+        eq(boards.type, "EV" as any),
+        eq(boards.isRebirth, false)
+      ))
+      .limit(1);
+
+    if (!myPosition.length || myPosition[0].parentId === null) return;
+    const parentUserId = myPosition[0].parentId;
+
+    // Parent must have a completed non-rebirth EV board
+    const parentBoard = await db.select().from(boards)
+      .where(and(
+        eq(boards.userId, parentUserId),
+        eq(boards.type, "EV" as any),
+        eq(boards.status, "COMPLETED" as any),
+        eq(boards.isRebirth, false)
+      ))
+      .limit(1);
+
+    if (!parentBoard.length) return;
+
+    // Don't double-reward — check if parent already has a non-rebirth EV reward
+    const existingReward = await db.select().from(evRewards)
+      .where(and(
+        eq(evRewards.userId, parentUserId),
+        eq(evRewards.isFromRebirth, false)
+      ))
+      .limit(1);
+
+    if (existingReward.length > 0) return;
+
+    // Count total grandchildren of parentUserId in the EV matrix (level 2)
+    const level1Children = await this.getMatrixChildren(parentUserId, "EV");
+    let totalGrandchildren = 0;
+    for (const child of level1Children) {
+      const grandchildCount = await this.getMatrixChildrenCount(child.id, "EV");
+      totalGrandchildren += grandchildCount;
+    }
+
+    // Reward only when all 36 level-2 positions are filled (6 × 6)
+    if (totalGrandchildren >= 36) {
+      await this.createEvReward(parentUserId, false);
+    }
+  }
+
   async createEvReward(userId: number, isFromRebirth: boolean = false, rebirthIndex?: number, rebirthBoardId?: number): Promise<EvReward> {
     const claimType = isFromRebirth ? "UNCLAIMED" : "VEHICLE";
 
@@ -2039,7 +2096,7 @@ export class DatabaseStorage implements IStorage {
       type: "BOARD_COMPLETION",
       description: isFromRebirth
         ? `Rebirth EV Board #${rebirthIndex} completed - Choose EV Vehicle or Rs.1,00,000 cash!`
-        : "EV Board completed - EV Vehicle reward earned (worth Rs.1,00,000)!",
+        : "EV Board fully completed (Level 1: 6 + Level 2: 36 placements) - EV Vehicle reward earned (worth Rs.1,00,000)!",
       status: "COMPLETED"
     });
 
