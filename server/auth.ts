@@ -63,8 +63,13 @@ export function setupAuth(app: Express) {
 
   passport.serializeUser((user, done) => done(null, (user as User).id));
   passport.deserializeUser(async (id, done) => {
-    const user = await storage.getUser(id as number);
-    done(null, user);
+    try {
+      const user = await storage.getUser(id as number);
+      if (!user) return done(null, false);
+      done(null, user);
+    } catch {
+      done(null, false);
+    }
   });
 
   app.post("/api/register", async (req, res, next) => {
