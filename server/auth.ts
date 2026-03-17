@@ -129,10 +129,18 @@ export function setupAuth(app: Express) {
     });
   });
 
-  app.get("/api/user", (req, res) => {
+  app.get("/api/user", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const isImpersonating = !!(req.session as any).originalAdminId;
-    res.json({ ...(req.user as any), isImpersonating });
+    const user = req.user as any;
+    let sponsorName: string | null = null;
+    if (user.sponsorId) {
+      try {
+        const sponsor = await storage.getUser(user.sponsorId);
+        sponsorName = sponsor?.fullName || null;
+      } catch {}
+    }
+    res.json({ ...user, isImpersonating, sponsorName });
   });
 
   // Admin impersonation: log in as another user without their password
