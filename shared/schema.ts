@@ -118,7 +118,7 @@ export const rebirthAccounts = pgTable("rebirth_accounts", {
 export const kycStatusEnum = pgEnum("kyc_status", ["NOT_SUBMITTED", "PENDING", "VERIFIED", "REJECTED"]);
 
 // EV Reward Status Enum
-export const evRewardStatusEnum = pgEnum("ev_reward_status", ["PENDING", "PROCESSING", "DELIVERED"]);
+export const evRewardStatusEnum = pgEnum("ev_reward_status", ["PENDING", "PROCESSING", "DELIVERED", "AWAITING_REFERRALS"]);
 
 // EV Reward Claim Type Enum
 export const evRewardClaimTypeEnum = pgEnum("ev_reward_claim_type", ["VEHICLE", "CASH", "UNCLAIMED"]);
@@ -178,6 +178,8 @@ export const evRewards = pgTable("ev_rewards", {
   adminNote: text("admin_note"),
   awardedAt: timestamp("awarded_at").defaultNow(),
   deliveredAt: timestamp("delivered_at"),
+  referralTimerStartedAt: timestamp("referral_timer_started_at"),
+  referralDeadline: timestamp("referral_deadline"),
 });
 
 // SMTP Settings Table (singleton - one row)

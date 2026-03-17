@@ -34,10 +34,23 @@ import {
   IndianRupee,
   Hash,
   UserCheck,
+  Clock,
+  Timer,
+  XCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+
+interface EvReferralTimer {
+  active: boolean;
+  expired: boolean;
+  deadline: string;
+  timerStartedAt: string;
+  daysRemaining: number;
+  currentReferrals: number;
+  requiredReferrals: number;
+}
 
 interface DashboardData {
   wallet: {
@@ -51,6 +64,7 @@ interface DashboardData {
   level1Placements: number;
   progress: number;
   totalTeamSize: number;
+  evReferralTimer: EvReferralTimer | null;
 }
 
 function StatCard({
@@ -269,6 +283,72 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* EV Referral Timer Banner */}
+        {data?.evReferralTimer && (
+          <Card className={`border-2 ${data.evReferralTimer.expired ? "border-destructive/50 bg-destructive/5" : "border-amber-500/60 bg-amber-50/50 dark:bg-amber-950/20"}`}>
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${data.evReferralTimer.expired ? "bg-destructive/10 text-destructive" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"}`}>
+                  {data.evReferralTimer.expired ? (
+                    <XCircle className="w-5 h-5" />
+                  ) : (
+                    <Timer className="w-5 h-5" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className={`font-bold text-sm ${data.evReferralTimer.expired ? "text-destructive" : "text-amber-700 dark:text-amber-400"}`}>
+                      {data.evReferralTimer.expired
+                        ? "EV Vehicle Reward — Timer Expired"
+                        : "EV Vehicle Reward — Action Required!"}
+                    </h3>
+                    {!data.evReferralTimer.expired && (
+                      <Badge className="bg-amber-500 text-white text-xs px-2 py-0.5" data-testid="badge-ev-timer">
+                        {data.evReferralTimer.daysRemaining} day{data.evReferralTimer.daysRemaining !== 1 ? "s" : ""} left
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {data.evReferralTimer.expired
+                      ? "Your 15-day window to meet the 6 direct referral condition has expired. The EV reward has been forfeited."
+                      : "Your EV Board Level 1 & Level 2 matrix is complete! You need 6 direct referrals to unlock your EV Vehicle reward."}
+                  </p>
+
+                  {/* Referral progress */}
+                  {!data.evReferralTimer.expired && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5" />
+                          Direct referrals
+                        </span>
+                        <span className={`font-bold ${data.evReferralTimer.currentReferrals >= 6 ? "text-green-600" : "text-amber-600 dark:text-amber-400"}`}>
+                          {data.evReferralTimer.currentReferrals} / {data.evReferralTimer.requiredReferrals}
+                        </span>
+                      </div>
+                      <Progress
+                        value={Math.min(100, (data.evReferralTimer.currentReferrals / data.evReferralTimer.requiredReferrals) * 100)}
+                        className="h-2"
+                      />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Deadline: {new Date(data.evReferralTimer.deadline).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                        <Link href="/team">
+                          <span className="text-primary font-medium hover:underline cursor-pointer flex items-center gap-1">
+                            Invite now <ArrowRight className="w-3 h-3" />
+                          </span>
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats Grid */}
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">

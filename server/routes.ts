@@ -6,7 +6,7 @@ import { setupAuth, hashPassword, comparePasswords } from "./auth";
 import { storage } from "./storage";
 import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
-import { insertUserSchema, transactions } from "@shared/schema";
+import { insertUserSchema, transactions, evRewards } from "@shared/schema";
 import { sql, and, eq } from "drizzle-orm";
 import { db } from "./db";
 import { sendRegistrationEmail, sendActivationEmail, sendActivationInvoiceEmail, sendTestEmail, isSmtpEnabled, sendPasswordOtpEmail } from "./email";
@@ -91,6 +91,33 @@ export async function registerRoutes(
 
     const totalWithdrawn = await storage.getUserTotalWithdrawals(userId);
 
+    // Check for AWAITING_REFERRALS EV reward (15-day timer)
+    const [awaitingReferralReward] = await db.select().from(evRewards)
+      .where(and(
+        eq(evRewards.userId, userId),
+        eq(evRewards.status, "AWAITING_REFERRALS" as any),
+        eq(evRewards.isFromRebirth, false)
+      ))
+      .limit(1);
+
+    let evReferralTimer = null;
+    if (awaitingReferralReward) {
+      const now = new Date();
+      const deadline = awaitingReferralReward.referralDeadline ? new Date(awaitingReferralReward.referralDeadline) : null;
+      const expired = deadline ? now > deadline : false;
+      const msRemaining = deadline ? Math.max(0, deadline.getTime() - now.getTime()) : 0;
+      const daysRemaining = Math.ceil(msRemaining / (1000 * 60 * 60 * 24));
+      evReferralTimer = {
+        active: !expired,
+        expired,
+        deadline: awaitingReferralReward.referralDeadline,
+        timerStartedAt: awaitingReferralReward.referralTimerStartedAt,
+        daysRemaining: expired ? 0 : daysRemaining,
+        currentReferrals: directReferralCount,
+        requiredReferrals: 6,
+      };
+    }
+
     res.json({
       wallet: finalWallet,
       activeBoards: boardsWithProgress,
@@ -99,6 +126,7 @@ export async function registerRoutes(
       progress: progress,
       totalTeamSize: level1Count,
       totalWithdrawn,
+      evReferralTimer,
     });
   });
 

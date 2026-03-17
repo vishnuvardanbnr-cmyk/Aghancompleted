@@ -840,6 +840,11 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    // After joining any EV board, check if the new member's sponsor has a pending 15-day referral timer
+    if (boardType === "EV" && user.sponsorId) {
+      await this.checkAndActivatePendingReferralReward(user.sponsorId);
+    }
+
     return { success: true, message: `Successfully joined ${boardType} Board` };
   }
 
@@ -2086,8 +2091,69 @@ export class DatabaseStorage implements IStorage {
 
     // Reward only when all 36 level-2 positions are filled (6 × 6)
     if (totalGrandchildren >= 36) {
-      await this.createEvReward(parentUserId, false);
+      // Condition 2 (matrix) is met — now check Condition 1 (6 direct referrals)
+      const directReferrals = await this.getActiveDirectReferralCount(parentUserId);
+
+      if (directReferrals >= 6) {
+        // Both conditions met — give reward immediately
+        await this.createEvReward(parentUserId, false);
+      } else {
+        // Condition 2 met but Condition 1 not yet — start 15-day timer
+        const timerStart = new Date();
+        const deadline = new Date(timerStart.getTime() + 15 * 24 * 60 * 60 * 1000);
+        await db.insert(evRewards).values({
+          userId: parentUserId,
+          boardType: "EV" as any,
+          rewardAmount: "100000",
+          status: "AWAITING_REFERRALS" as any,
+          claimType: "VEHICLE" as any,
+          isFromRebirth: false,
+          referralTimerStartedAt: timerStart,
+          referralDeadline: deadline,
+        });
+        await this.createTransaction({
+          userId: parentUserId,
+          amount: "100000",
+          type: "BOARD_COMPLETION",
+          description: "EV Board Level 1+2 complete — need 6 direct referrals within 15 days to claim EV Vehicle reward",
+          status: "COMPLETED"
+        });
+      }
     }
+  }
+
+  async checkAndActivatePendingReferralReward(sponsorId: number): Promise<void> {
+    // Check if this sponsor has an AWAITING_REFERRALS EV reward
+    const [awaitingReward] = await db.select().from(evRewards)
+      .where(and(
+        eq(evRewards.userId, sponsorId),
+        eq(evRewards.status, "AWAITING_REFERRALS" as any),
+        eq(evRewards.isFromRebirth, false)
+      ))
+      .limit(1);
+
+    if (!awaitingReward) return;
+
+    // Check timer hasn't expired
+    const now = new Date();
+    if (awaitingReward.referralDeadline && now > awaitingReward.referralDeadline) return;
+
+    // Check if sponsor now has >= 6 direct referrals
+    const directReferrals = await this.getActiveDirectReferralCount(sponsorId);
+    if (directReferrals < 6) return;
+
+    // Both conditions now met — upgrade reward to PENDING
+    await db.update(evRewards)
+      .set({ status: "PENDING" as any })
+      .where(eq(evRewards.id, awaitingReward.id));
+
+    await this.createTransaction({
+      userId: sponsorId,
+      amount: "100000",
+      type: "BOARD_COMPLETION",
+      description: "EV Vehicle reward unlocked — 6 direct referrals condition met within 15-day window!",
+      status: "COMPLETED"
+    });
   }
 
   async createEvReward(userId: number, isFromRebirth: boolean = false, rebirthIndex?: number, rebirthBoardId?: number): Promise<EvReward> {
