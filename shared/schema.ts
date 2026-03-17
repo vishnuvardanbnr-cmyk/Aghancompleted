@@ -80,6 +80,7 @@ export const transactions = pgTable("transactions", {
   type: transactionTypeEnum("type").notNull(),
   status: transactionStatusEnum("status").default("COMPLETED"),
   description: text("description"),
+  sourceUserId: integer("source_user_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

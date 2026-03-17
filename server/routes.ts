@@ -880,10 +880,25 @@ export async function registerRoutes(
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 50;
       const type = req.query.type as string || "all";
-      const transactions = await storage.getAllTransactions(page, limit, type);
+      const userIdFilter = req.query.userId ? parseInt(req.query.userId as string) : undefined;
+      const transactions = await storage.getAllTransactions(page, limit, type, userIdFilter);
       res.json(transactions);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch transactions" });
+    }
+  });
+
+  // Admin: Get admin's own received income (with source user detail)
+  app.get("/api/admin/my-income", requireAdmin, async (req, res) => {
+    try {
+      const adminId = (req.user as any).id;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const type = req.query.type as string || "all";
+      const result = await storage.getAllTransactions(page, limit, type, adminId);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch admin income" });
     }
   });
 

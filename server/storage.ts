@@ -155,7 +155,7 @@ export class DatabaseStorage implements IStorage {
     return wallet;
   }
 
-  async addToMainWallet(userId: number, amount: number, description: string): Promise<void> {
+  async addToMainWallet(userId: number, amount: number, description: string, sourceUserId?: number): Promise<void> {
     const wallet = await this.getWallet(userId);
     if (!wallet) return;
     
@@ -172,7 +172,8 @@ export class DatabaseStorage implements IStorage {
       amount: amount.toString(),
       type: "REFERRAL_INCOME",
       description,
-      status: "COMPLETED"
+      status: "COMPLETED",
+      ...(sourceUserId ? { sourceUserId } : {})
     });
   }
 
@@ -683,7 +684,8 @@ export class DatabaseStorage implements IStorage {
         await this.addToMainWallet(
           adminUser.id,
           config.directSponsor || 500,
-          `Direct sponsor income from ${user.fullName} (no sponsor - routed to admin)`
+          `Direct sponsor income from ${user.fullName} (no sponsor - routed to admin)`,
+          userId
         );
       }
 
@@ -742,7 +744,8 @@ export class DatabaseStorage implements IStorage {
         await this.addToMainWallet(
           adminUser.id,
           missedAmount,
-          `Level income (${missedLevels} levels) from ${user.fullName} (EV Board - no upline, routed to admin)`
+          `Level income (${missedLevels} levels) from ${user.fullName} (EV Board - no upline, routed to admin)`,
+          userId
         );
       }
     }
@@ -756,7 +759,8 @@ export class DatabaseStorage implements IStorage {
           await this.addToMainWallet(
             adminUser.id,
             config.directSponsor,
-            `Direct sponsor income from ${user.fullName} (${boardType}) - Sub-account entry, routed to admin`
+            `Direct sponsor income from ${user.fullName} (${boardType}) - Sub-account entry, routed to admin`,
+            userId
           );
         }
       } else if (user.sponsorId && config.directSponsor) {
@@ -769,7 +773,8 @@ export class DatabaseStorage implements IStorage {
         await this.addToMainWallet(
           adminUser.id,
           config.directSponsor,
-          `Direct sponsor income from ${user.fullName} (${boardType} - no sponsor, routed to admin)`
+          `Direct sponsor income from ${user.fullName} (${boardType} - no sponsor, routed to admin)`,
+          userId
         );
       }
       
@@ -835,7 +840,8 @@ export class DatabaseStorage implements IStorage {
         await this.addToMainWallet(
           adminUser.id,
           missedAmount,
-          `Level income (${missedLevels} levels) from ${user.fullName} (${boardType} Board - no upline, routed to admin)`
+          `Level income (${missedLevels} levels) from ${user.fullName} (${boardType} Board - no upline, routed to admin)`,
+          userId
         );
       }
     }
@@ -1537,54 +1543,43 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getAllTransactions(page: number, limit: number, type: string): Promise<{ transactions: any[]; total: number }> {
+  async getAllTransactions(page: number, limit: number, type: string, userIdFilter?: number): Promise<{ transactions: any[]; total: number }> {
     const offset = (page - 1) * limit;
 
-    let txns;
-    let countResult;
+    const selectFields = {
+      id: transactions.id,
+      userId: transactions.userId,
+      amount: transactions.amount,
+      type: transactions.type,
+      status: transactions.status,
+      description: transactions.description,
+      sourceUserId: transactions.sourceUserId,
+      createdAt: transactions.createdAt,
+      username: users.username,
+      fullName: users.fullName,
+      sourceUsername: sql<string>`(SELECT username FROM users WHERE id = ${transactions.sourceUserId})`,
+      sourceFullName: sql<string>`(SELECT full_name FROM users WHERE id = ${transactions.sourceUserId})`,
+    };
 
-    if (type === "all") {
-      txns = await db
-        .select({
-          id: transactions.id,
-          userId: transactions.userId,
-          amount: transactions.amount,
-          type: transactions.type,
-          status: transactions.status,
-          description: transactions.description,
-          createdAt: transactions.createdAt,
-          username: users.username,
-          fullName: users.fullName
-        })
-        .from(transactions)
-        .leftJoin(users, eq(transactions.userId, users.id))
-        .orderBy(desc(transactions.createdAt))
-        .limit(limit)
-        .offset(offset);
+    const conditions: any[] = [];
+    if (type !== "all") conditions.push(eq(transactions.type, type as any));
+    if (userIdFilter) conditions.push(eq(transactions.userId, userIdFilter));
 
-      countResult = await db.select({ count: sql<number>`count(*)` }).from(transactions);
-    } else {
-      txns = await db
-        .select({
-          id: transactions.id,
-          userId: transactions.userId,
-          amount: transactions.amount,
-          type: transactions.type,
-          status: transactions.status,
-          description: transactions.description,
-          createdAt: transactions.createdAt,
-          username: users.username,
-          fullName: users.fullName
-        })
-        .from(transactions)
-        .leftJoin(users, eq(transactions.userId, users.id))
-        .where(eq(transactions.type, type as any))
-        .orderBy(desc(transactions.createdAt))
-        .limit(limit)
-        .offset(offset);
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      countResult = await db.select({ count: sql<number>`count(*)` }).from(transactions).where(eq(transactions.type, type as any));
-    }
+    const txns = await db
+      .select(selectFields)
+      .from(transactions)
+      .leftJoin(users, eq(transactions.userId, users.id))
+      .where(whereClause)
+      .orderBy(desc(transactions.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(transactions)
+      .where(whereClause);
 
     return { transactions: txns, total: Number(countResult[0]?.count || 0) };
   }
@@ -1938,7 +1933,8 @@ export class DatabaseStorage implements IStorage {
         await this.addToMainWallet(
           adminUser.id,
           config.directSponsor || 500,
-          `Direct sponsor income from ${rebirthLabel} (Rebirth - no sponsor, routed to admin)`
+          `Direct sponsor income from ${rebirthLabel} (Rebirth - no sponsor, routed to admin)`,
+          userId
         );
       }
 
@@ -1995,7 +1991,8 @@ export class DatabaseStorage implements IStorage {
         await this.addToMainWallet(
           adminUser.id,
           missedAmount,
-          `Level income (${missedLevels} levels) from ${rebirthLabel} (EV Rebirth - no upline, routed to admin)`
+          `Level income (${missedLevels} levels) from ${rebirthLabel} (EV Rebirth - no upline, routed to admin)`,
+          userId
         );
       }
 
