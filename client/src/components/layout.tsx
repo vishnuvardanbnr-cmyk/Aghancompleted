@@ -143,9 +143,107 @@ function Sidebar() {
   );
 }
 
+function MobileMenu() {
+  const [location] = useLocation();
+  const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const menuItems = navItems.filter(item => item.path !== "/income-details" && item.path !== "/register-member");
+  const extraItems = navItems.filter(item => item.path === "/income-details" || item.path === "/register-member");
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden h-8 w-8"
+          data-testid="button-mobile-menu"
+        >
+          <Menu className="w-5 h-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-64 p-0 flex flex-col">
+        <div className="p-5 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
+              <Zap className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h2 className="font-bold text-base">Aghan</h2>
+              <p className="text-xs text-muted-foreground">Promoters</p>
+            </div>
+          </div>
+        </div>
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {extraItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location === item.path;
+            return (
+              <Link key={item.path} href={item.path}>
+                <div
+                  className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors cursor-pointer ${
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid={`mobile-menu-${item.label.toLowerCase()}`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="font-medium">{item.label}</span>
+                </div>
+              </Link>
+            );
+          })}
+          <div className="pt-2 border-t border-border mt-2">
+            <p className="text-xs text-muted-foreground px-4 mb-2">Quick Links</p>
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location === item.path;
+              return (
+                <Link key={item.path} href={item.path}>
+                  <div
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-md transition-colors cursor-pointer ${
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                    data-testid={`mobile-menu-quick-${item.label.toLowerCase()}`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+        <div className="p-4 border-t border-border space-y-2">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3"
+            onClick={toggleTheme}
+            data-testid="button-mobile-theme"
+          >
+            {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 text-destructive"
+            onClick={logout}
+            data-testid="button-mobile-logout"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Logout</span>
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function MobileFooter() {
   const [location] = useLocation();
-  const { user } = useAuth();
   const mobileItems = navItems.filter(item => item.path !== "/income-details" && item.path !== "/register-member");
 
   return (
@@ -214,15 +312,14 @@ export function Layout({ children }: { children: ReactNode }) {
       </div>
       <div className="flex-1 flex flex-col min-w-0">
         <ImpersonationBanner />
-        <header className="sticky top-0 z-50 h-12 border-b border-border bg-background/80 backdrop-blur-sm px-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 md:hidden">
+        <header className="sticky top-0 z-50 h-12 border-b border-border bg-background/80 backdrop-blur-sm px-4 flex items-center justify-between md:hidden">
+          <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
               <Zap className="w-4 h-4 text-primary-foreground" />
             </div>
             <span className="font-semibold text-sm">Aghan</span>
           </div>
-          <div className="flex items-center gap-2 ml-auto">
-          </div>
+          <MobileMenu />
         </header>
         <main className="flex-1 p-4 md:p-6 overflow-auto pb-20 md:pb-6">{children}</main>
       </div>
