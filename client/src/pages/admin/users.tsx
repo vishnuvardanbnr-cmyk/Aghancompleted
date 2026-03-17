@@ -37,6 +37,7 @@ interface User {
   sponsorName: string | null;
   sponsorUsername: string | null;
   createdAt: string;
+  isActive: boolean;
 }
 
 interface KycInfo {
@@ -243,6 +244,7 @@ export default function AdminUsers() {
                       <TableHead>ID</TableHead>
                       <TableHead>Username</TableHead>
                       <TableHead>Full Name</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Mobile</TableHead>
                       <TableHead>Referral Code</TableHead>
@@ -257,6 +259,17 @@ export default function AdminUsers() {
                         <TableCell>{user.id}</TableCell>
                         <TableCell className="font-medium">{user.username}</TableCell>
                         <TableCell>{user.fullName}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={user.isActive ? "default" : "secondary"}
+                            className={user.isActive
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800"
+                              : "bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-400"}
+                            data-testid={`badge-status-${user.id}`}
+                          >
+                            {user.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
                         <TableCell>{user.email}</TableCell>
                         <TableCell>{user.mobile}</TableCell>
                         <TableCell>

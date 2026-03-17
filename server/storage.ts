@@ -1387,10 +1387,24 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    // Determine which users have at least one board entry (active = invested)
+    const userIds = usersList.map(u => u.id);
+    let activeUserIds = new Set<number>();
+    if (userIds.length > 0) {
+      const activeBoardRows = await db
+        .select({ userId: boards.userId })
+        .from(boards)
+        .where(sql`${boards.userId} IN (${sql.join(userIds.map(id => sql`${id}`), sql`, `)})`);
+      for (const row of activeBoardRows) {
+        activeUserIds.add(row.userId);
+      }
+    }
+
     const usersWithSponsor = usersList.map(u => ({
       ...u,
       sponsorName: u.sponsorId ? sponsorMap[u.sponsorId]?.fullName || null : null,
       sponsorUsername: u.sponsorId ? sponsorMap[u.sponsorId]?.username || null : null,
+      isActive: activeUserIds.has(u.id),
     }));
 
     return { users: usersWithSponsor, total };
