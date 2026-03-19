@@ -55,6 +55,7 @@ export interface IStorage {
   findFCFSPlacementParent(boardType: string): Promise<number | null>;
   addToMatrix(boardId: number, userId: number, parentId: number | null, position: number, level: number): Promise<void>;
   getUplineChain(userId: number, boardType: string, maxLevels: number): Promise<number[]>;
+  getSponsorChain(userId: number, maxLevels: number): Promise<number[]>;
   
   // Board Operations
   joinBoard(userId: number, boardType: string): Promise<{ success: boolean; message: string }>;
@@ -597,6 +598,28 @@ export class DatabaseStorage implements IStorage {
     return upline;
   }
 
+  async getSponsorChain(userId: number, maxLevels: number): Promise<number[]> {
+    // Walk up the referral/sponsor chain for level income distribution
+    // Level 1 = joiner's direct sponsor, Level 2 = sponsor's sponsor, etc.
+    const chain: number[] = [];
+    let currentUserId = userId;
+
+    for (let i = 0; i < maxLevels; i++) {
+      const result = await db
+        .select({ sponsorId: users.sponsorId })
+        .from(users)
+        .where(eq(users.id, currentUserId))
+        .limit(1);
+
+      if (result.length === 0 || !result[0].sponsorId) break;
+
+      chain.push(result[0].sponsorId);
+      currentUserId = result[0].sponsorId;
+    }
+
+    return chain;
+  }
+
   async joinBoard(userId: number, boardType: string): Promise<{ success: boolean; message: string }> {
     const config = BOARD_CONFIG[boardType as keyof typeof BOARD_CONFIG];
     if (!config) {
@@ -689,7 +712,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const upline = await this.getUplineChain(userId, boardType, config.levels);
+      const upline = await this.getSponsorChain(userId, config.levels);
       for (let i = 0; i < upline.length && i < config.levels; i++) {
         const nextBoard = getNextBoard(boardType);
         const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
@@ -798,7 +821,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
       
-      const upline = await this.getUplineChain(userId, boardType, config.levels);
+      const upline = await this.getSponsorChain(userId, config.levels);
       for (let i = 0; i < upline.length && i < config.levels; i++) {
         const nextBoard = getNextBoard(boardType);
         const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
@@ -2003,7 +2026,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const upline = await this.getUplineChain(userId, "EV", config.levels);
+      const upline = await this.getSponsorChain(userId, config.levels);
       for (let i = 0; i < upline.length && i < config.levels; i++) {
         const nextBoard = getNextBoard("EV");
         const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
