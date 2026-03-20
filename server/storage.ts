@@ -712,7 +712,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const upline = await this.getSponsorChain(userId, config.levels);
+      const upline = await this.getUplineChain(userId, boardType, config.levels);
       for (let i = 0; i < upline.length && i < config.levels; i++) {
         const nextBoard = getNextBoard(boardType);
         const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
@@ -821,7 +821,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
       
-      const upline = await this.getSponsorChain(userId, config.levels);
+      const upline = await this.getUplineChain(userId, boardType, config.levels);
       for (let i = 0; i < upline.length && i < config.levels; i++) {
         const nextBoard = getNextBoard(boardType);
         const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
@@ -2026,7 +2026,7 @@ export class DatabaseStorage implements IStorage {
         );
       }
 
-      const upline = await this.getSponsorChain(userId, config.levels);
+      const upline = await this.getUplineChain(userId, "EV", config.levels);
       for (let i = 0; i < upline.length && i < config.levels; i++) {
         const nextBoard = getNextBoard("EV");
         const existingNextBoard = nextBoard ? await this.getBoard(upline[i], nextBoard) : null;
