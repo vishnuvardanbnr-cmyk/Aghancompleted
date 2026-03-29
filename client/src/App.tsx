@@ -87,7 +87,15 @@ function AdminRoute({ component: Component }: { component: () => JSX.Element }) 
     );
   }
 
-  if (!user || !(user as any).isAdmin) return null;
+  if (!user) {
+    setLocation("/");
+    return null;
+  }
+
+  if (!(user as any).isAdmin) {
+    setLocation("/dashboard");
+    return null;
+  }
 
   return <Component />;
 }
